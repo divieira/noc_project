@@ -31,16 +31,25 @@ X = [y; x; w; a; k1; k2];
 
 u = SX.sym('u');
 
-fun=ode(X,u,tau)
 
 tf = SX.sym('tf');
-odestruct = struct('x', X, 'p', u, 'ode', fun);
+fun=ode(X,u,tau).*tf;
+
+
+
+p=[u,tf]';
+odestruct = struct('x', X, 'p', p, 'ode', fun);
 opts = struct('abstol', 1e-8, 'reltol', 1e-8);
 F = integrator('F', 'cvodes', odestruct, opts);
 
 
 
-res = F('x0', X0, 'p', 0)
+res = F('x0', X0, 'p', [0, 1]);
+X=full(res.xf)
+res = F('x0', X, 'p', [1, 1]);
+X=full(res.xf)
+res = F('x0', X, 'p', [-1, 1]);
+X=full(res.xf)
 
 
 
