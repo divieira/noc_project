@@ -19,7 +19,10 @@ dt = 1/fs;  % s
 tau = 1.0;    % s (arbitrary constant)
 
 % Initial parameters
-X0 = [ 0 .1 2*pi*6 .01 -1e1 1e1 ];
+X0 = [ 0 .1];
+
+% parameters
+par=[2*pi*6 .01 -1e1 1e1];
 
 y=SX.sym('y');
 x=SX.sym('x');
@@ -27,29 +30,33 @@ w=SX.sym('w')
 a=SX.sym('a');
 k1=SX.sym('k1');
 k2=SX.sym('k2')
-X = [y; x; w; a; k1; k2];
+X = [y; x];
 
 u = SX.sym('u');
 
 
 tf = SX.sym('tf');
-fun=ode(X,u,tau).*tf;
+fun=ode(X,u,[tau,w,a,k1,k2]).*tf;
 
 
 
-p=[u,tf]';
+p=[u,tf,w, a, k1, k2]';
 odestruct = struct('x', X, 'p', p, 'ode', fun);
 opts = struct('abstol', 1e-8, 'reltol', 1e-8);
 F = integrator('F', 'cvodes', odestruct, opts);
 
 
+N=200;
+X_test=zeros(N+1,2)
+X_test(1,:)=X0;
 
-res = F('x0', X0, 'p', [0, 1]);
-X=full(res.xf)
-res = F('x0', X, 'p', [1, 1]);
-X=full(res.xf)
-res = F('x0', X, 'p', [-1, 1]);
-X=full(res.xf)
+T=2;
+ts=T/N;
+for ii=1:200
+    res = F('x0', X_test(ii,:)', 'p', [0, ts, par]);
+    X_test(ii+1,:)=full(res.xf)
+end
+plot(X_test(:,1))
 
 
 
@@ -62,19 +69,18 @@ function f = ode(X, u, p)
     % Ns is the number of states of the nonlinear system.
     y = X(1);
     x = X(2);
-    w = X(3);
-    a = X(4);
-    k1 = X(5);
-    k2 = X(6);
+
+    
     tau=p(1);
+    w=p(2); 
+    a=p(3); 
+    k1=p(4); 
+    k2=p(5);
     
     dy =  x*w + y*(a - x^2 - y^2)/tau + k1*u;
     dx = -y*w + x*(a - x^2 - y^2)/tau + k2*u;
-    dw = 0;
-    da = 0;
-    dk1 = 0;
-    dk2 = 0;
+
    
     
-   f=[dy;dx;dw;da;dk1;dk2];
+   f=[dy;dx];
 end
