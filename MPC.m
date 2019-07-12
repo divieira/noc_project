@@ -6,15 +6,21 @@ import casadi.*
 
 % parameters
 param=[2*pi*6 .01 -100e1 0e1];
-fs=100;
+fs=120;
 tau = 1.0;    % s (arbitrary constant)
 k=1.; %cost of control
 
 %%simulation / MPC
-sigma=0.2;  %disturbance on each simulation step
-Control_cyc=100;
-shift=5;%Shift of MPC
+sigma=0.4;  %disturbance on each simulation step
+Control_cyc=500;
+shift=1;%Shift of MPC
 N=10;   %Horizon Optimal control
+
+%Ref
+f_sine=8;
+A=1.5;
+B=-0.5;
+C=1.5;
 
 % parameters
 par=[2*pi*6 1.01 -1e1 0e1];
@@ -77,9 +83,7 @@ for jj=0:round(Control_cyc/shift)
     %Define Reference
     T=N*1/fs;
     t_prob=0+jj*shift*1/fs:1/fs:T+jj*shift*1/fs;
-    f_sine=8;
-    A=0.5;
-    x_ref=sin(2*pi*f_sine*t_prob);
+    x_ref=f_ref(t_prob,A,B,C,f_sine);
    % figure(3)
    % plot(t_prob,x_ref)
    % hold on
@@ -115,7 +119,7 @@ for jj=0:round(Control_cyc/shift)
     % Create an NLP solver
     prob = struct('f', J, 'x', vertcat(w{:}) , 'g', vertcat(g{:}));
     options=struct;
-    options.ipopt.max_iter = 10;
+    options.ipopt.max_iter = 3;
     solver = nlpsol('solver', 'ipopt', prob, options);
 
     % Solve the NLP
@@ -136,7 +140,7 @@ end
 figure(2)
 
 tgrid = linspace(0, 1/fs*length(U_applied), length(U_applied));
-x_ref=sin(2*pi*f_sine*tgrid);
+x_ref=f_ref(tgrid,A,B,C,f_sine);
 clf;
 hold on
 plot(tgrid,x_ref)
@@ -169,4 +173,8 @@ function f = ode(X, u, p)
    
     
    f=[dy;dx];
+end
+
+function x=f_ref(t_prob, A,B,C,f_sine)
+    x=A*sin(2*pi*f_sine*t_prob)+B*t_prob.*sin(2*pi*f_sine*t_prob)+C*heaviside(t_prob-0.543).*sin(2*pi*f_sine*t_prob+1/2*pi);
 end
