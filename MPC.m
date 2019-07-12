@@ -4,14 +4,17 @@ clear
 clc
 import casadi.*
 
-T = 1; % Time horizon
+% parameters
+param=[2*pi*6 .01 -100e1 0e1];
 fs=100;
-N = T/fs; % number of control intervals
 tau = 1.0;    % s (arbitrary constant)
 k=1.; %cost of control
 
-%%simulation
-sigma=0.05;
+%%simulation / MPC
+sigma=0.2;  %disturbance on each simulation step
+Control_cyc=100;
+shift=5;%Shift of MPC
+N=10;   %Horizon Optimal control
 
 % parameters
 par=[2*pi*6 1.01 -1e1 0e1];
@@ -45,27 +48,12 @@ opts = struct('abstol', 1e-8, 'reltol', 1e-8,'tf',1/fs);
 F = integrator('F', 'cvodes', odestruct, opts);
 
 %%
-N=10;
-X_test=zeros(N+1,2);
-% Initial parameters
-X0 = [ 1 .1];
-X_test(1,:)=X0;
-% parameters
-param=[2*pi*6 .01 -100e1 0e1];
-T=N*1/fs;
-ts=T/N;
-for ii=1:N
-    res = F('x0', X_test(ii,:)', 'p', [0, param]);
-    X_test(ii+1,:)=full(res.xf);
-end
-plot(0:ts:T,X_test(:,1))
 
-Control_cyc=100;
-shift=1;
+
 U_applied=[];
 X_applied=[];
 X_generated=[1, 0.1];   %initial conditions
-for jj=0:Control_cyc-1
+for jj=0:round(Control_cyc/shift)
 %%
     % Start with an empty NLP
     w={};
@@ -136,11 +124,12 @@ for jj=0:Control_cyc-1
     w_opt = full(sol.x);
 
     u_opt = w_opt(3:3:end);
-    U_applied=[U_applied, u_opt(1)];
-    X_generated=F('x0', X_generated, 'p', [U_applied(end), param]);
-    X_generated=(full(X_generated.xf))+normrnd(0,sigma,[2,1]);
-    X_applied=[X_applied, X_generated];
-    
+    for kk=1:shift
+        U_applied=[U_applied, u_opt(kk)];
+        X_generated=F('x0', X_generated, 'p', [U_applied(end), param]);
+        X_generated=(full(X_generated.xf))+normrnd(0,sigma,[2,1]);
+        X_applied=[X_applied, X_generated];
+    end
 end
 
 % Plot the solution
