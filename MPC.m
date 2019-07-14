@@ -1,73 +1,81 @@
-% An implementation of direct multiple shooting
-% Joel Andersson, 2016
+% See: CasADi example direct_multiple_shooting.m
 clear
 clc
 import casadi.*
 
-% parameters
-param=[2*pi*6 .01 -100e1 0e1];
-fs=120;
-tau = 1.0;    % s (arbitrary constant)
-k=1.; %cost of control
+%% Parameters
+% Simulation
+fs = 120;       % Hz
+T = 5;          % s
+N = T*fs;       % steps
+ts = 1/fs;      % s
+t = ts*(1:N);   % time vector
+x0 = [1; 0];    % initial conditions
 
-%%simulation / MPC
-sigma=0.4;  %disturbance on each simulation step
-Control_cyc=500;
-shift=1;%Shift of MPC
-N=10;   %Horizon Optimal control
+% Model
+param = [2*pi*6 .01 -1e3 0]; % [w, a, k1, k2]
+tau = 1.0;      % s (arbitrary stiffness constant)
+sigma = 0.1;    % disturbance on each simulation step
 
-%Ref
-f_sine=8;
-A=1.5;
-B=-0.5;
-C=1.5;
+% Objective
+k = .1;     % control cost
 
-% parameters
-par=[2*pi*6 1.01 -1e1 0e1];
+% MPC
+shift = 1;  % MPC interval
+N_mpc = 10; % MPC horizon
+
+% Reference
+f_ref = 8;      % Hz
+a_ref = .5;     % mV
+t2_ref = 2.5;   % s
+a2_ref = .3;    % mV
+ref = @(k) a_ref*sin(2*pi*f_ref*k/fs) + a2_ref*heaviside(k/fs-t2_ref).*sin(2*pi*f_ref*k/fs);
+
+
+%% Model definition
 % Declare model variables
-y=SX.sym('y');
-x=SX.sym('x');
-w=SX.sym('w')
+x1=SX.sym('x1');
+x2=SX.sym('x2');
+w=SX.sym('w');
 a=SX.sym('a');
 k_1=SX.sym('k1');
-k_2=SX.sym('k2')
-X_state = [y; x];
+k_2=SX.sym('k2');
 
+x = [x1; x2];
 u = SX.sym('u');
 
-
-%x = [x1; x2];
-
 % Model equations
-xdot = ode(X_state,u,[tau,w,a,k_1,k_2]);
+xdot = ode(x,u,[tau,w,a,k_1,k_2]);
 
 % Objective term
 x_ref = SX.sym('x_ref');
-L = (x_ref-x)^2 + k*u^2;
-Loss=Function('Loss', {x,x_ref, u}, {L});
-
+L = (x_ref-x1)^2 + k*u^2;
 
 % Formulate discrete time dynamics
-p=[u,w, a, k_1, k_2]';
-odestruct = struct('x',X_state , 'p', p, 'ode', xdot);
-opts = struct('abstol', 1e-8, 'reltol', 1e-8,'tf',1/fs);
-F = integrator('F', 'cvodes', odestruct, opts);
+%p=[u, w, a, k_1, k_2]';
+%odestruct = struct('x',X_state , 'p', p, 'ode', xdot);
+%opts = struct('abstol', 1e-8, 'reltol', 1e-8,'tf',1/fs);
+%F = integrator('F', 'cvodes', odestruct, opts);
+%Loss=Function('Loss', {x,x_ref, u}, {L});
+p = [x_ref, u, w, a, k_1, k_2]';
+F = rk4integrator(x, p, xdot, L, 1/fs);
 
-%%
 
-
+%% MPC Simulation
+import casadi.*
 U_applied=[];
 X_applied=[];
-X_generated=[1, 0.1];   %initial conditions
-for jj=0:round(Control_cyc/shift)
-%%
+X_generated=x0;   %initial conditions
+i_next_mpc = 1;
+for i = 1:shift:N
+    %% Formulate NLP
     % Start with an empty NLP
     w={};
     w0 = [];
     lbw = [];
     ubw = [];
     J = 0;
-    g={};
+    g = {};
     lbg = [];
     ubg = [];
 
@@ -78,18 +86,8 @@ for jj=0:round(Control_cyc/shift)
     ubw = [ubw; X_generated(1); X_generated(2)];
     w0 = [w0; X_generated(1); X_generated(2)];
 
-    % Formulate the NLP
-
-    %Define Reference
-    T=N*1/fs;
-    t_prob=0+jj*shift*1/fs:1/fs:T+jj*shift*1/fs;
-    x_ref=f_ref(t_prob,A,B,C,f_sine);
-   % figure(3)
-   % plot(t_prob,x_ref)
-   % hold on
-
-
-    for k=0:N-1
+    %TODO: initialize w0 with previous guess
+    for k=0:N_mpc-1
         % New NLP variable for the control
         Uk = MX.sym(['U_' num2str(k)]);
         w = {w{:}, Uk};
@@ -98,10 +96,9 @@ for jj=0:round(Control_cyc/shift)
         w0 = [w0;  0];
 
         % Integrate till the end of the interval
-        Fk = F('x0', Xk, 'p', [Uk, param]);
+        Fk = F('x0', Xk, 'p', [ref(i+k), Uk, param]);
         Xk_end = Fk.xf;
-        %J=J+(full(Xk_end(1))-x_ref(k+1))^2;%;
-        J=J+Loss(Xk_end(1),x_ref(k+2),Uk);
+        J = J+Fk.qf;
 
         % New NLP variable for state at end of interval
         Xk = MX.sym(['X_' num2str(k+1)], 2);
@@ -118,8 +115,8 @@ for jj=0:round(Control_cyc/shift)
 
     % Create an NLP solver
     prob = struct('f', J, 'x', vertcat(w{:}) , 'g', vertcat(g{:}));
-    options=struct;
-    options.ipopt.max_iter = 3;
+    options = struct;
+    %options.ipopt.max_iter = 3; %FIXME: really necessary?
     solver = nlpsol('solver', 'ipopt', prob, options);
 
     % Solve the NLP
@@ -128,25 +125,21 @@ for jj=0:round(Control_cyc/shift)
     w_opt = full(sol.x);
 
     u_opt = w_opt(3:3:end);
-    for kk=1:shift
-        U_applied=[U_applied, u_opt(kk)];
-        X_generated=F('x0', X_generated, 'p', [U_applied(end), param]);
-        X_generated=(full(X_generated.xf))+normrnd(0,sigma,[2,1]);
-        X_applied=[X_applied, X_generated];
+    for k=0:shift-1
+        U_applied = [U_applied, u_opt(k+1)];
+        X_generated = F('x0', X_generated, 'p', [ref(i+k), U_applied(end), param]);
+        X_generated = (full(X_generated.xf))+normrnd(0,sigma,[2,1]);
+        X_applied = [X_applied, X_generated];
     end
 end
 
 % Plot the solution
-figure(2)
-
-tgrid = linspace(0, 1/fs*length(U_applied), length(U_applied));
-x_ref=f_ref(tgrid,A,B,C,f_sine);
-clf;
+figure;
 hold on
-plot(tgrid,x_ref)
-plot(tgrid, X_applied(1,:), '--')
-plot(tgrid, X_applied(2,:), '-')
-stairs(tgrid, [U_applied], '-.')
+plot(t, ref(1:N))
+plot(t, X_applied(1,:), '-')
+plot(t, X_applied(2,:), '--')
+stairs(t, U_applied, '-.')
 xlabel('t')
 legend('x_ref','x1','x2','u')
 
@@ -160,7 +153,6 @@ function f = ode(X, u, p)
     y = X(1);
     x = X(2);
 
-    
     tau=p(1);
     w=p(2); 
     a=p(3); 
@@ -169,12 +161,27 @@ function f = ode(X, u, p)
     
     dy =  x*w + y*(a - x^2 - y^2)/tau + k1*u;
     dx = -y*w + x*(a - x^2 - y^2)/tau + k2*u;
-
-   
     
    f=[dy;dx];
 end
 
-function x=f_ref(t_prob, A,B,C,f_sine)
-    x=A*sin(2*pi*f_sine*t_prob)+B*t_prob.*sin(2*pi*f_sine*t_prob)+C*heaviside(t_prob-0.543).*sin(2*pi*f_sine*t_prob+1/2*pi);
+
+function F = rk4integrator(x, p, xdot, L, T)
+   % Fixed step Runge-Kutta 4 integrator
+   M = 1;%4; % RK4 steps per interval
+   DT = T/M;
+   f = casadi.Function('f', {x, p}, {xdot, L});
+   X0 = x;%MX.sym('X0', 2);
+   P = p;%MX.sym('U');
+   X = X0;
+   Q = 0;
+   for j=1:M
+       [k1, k1_q] = f(X, P);
+       [k2, k2_q] = f(X + DT/2 * k1, P);
+       [k3, k3_q] = f(X + DT/2 * k2, P);
+       [k4, k4_q] = f(X + DT * k3, P);
+       X=X+DT/6*(k1 +2*k2 +2*k3 +k4);
+       Q = Q + DT/6*(k1_q + 2*k2_q + 2*k3_q + k4_q);
+    end
+    F = casadi.Function('F', {X0, P}, {X, Q}, {'x0','p'}, {'xf', 'qf'});
 end
