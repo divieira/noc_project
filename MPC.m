@@ -9,7 +9,6 @@ fs = 120;       % Hz
 T = 5;          % s
 N = T*fs;       % steps
 ts = 1/fs;      % s
-t = ts*(1:N);   % time vector
 x0 = [1; 0];    % initial conditions
 
 % Model
@@ -29,7 +28,7 @@ f_ref = 8;      % Hz
 a_ref = .5;     % mV
 t2_ref = 2.5;   % s
 a2_ref = .3;    % mV
-ref = @(k) a_ref*sin(2*pi*f_ref*k/fs) + a2_ref*heaviside(k/fs-t2_ref).*sin(2*pi*f_ref*k/fs);
+ref = @(t) a_ref*sin(2*pi*f_ref*t) + a2_ref*heaviside(t-t2_ref).*sin(2*pi*f_ref*t);
 
 
 %% Model definition
@@ -42,14 +41,15 @@ k_1=SX.sym('k1');
 k_2=SX.sym('k2');
 
 x = [x1; x2];
+p = [w, a, k_1, k_2]';
 u = SX.sym('u');
 
 % Model equations
 xdot = ode(x,u,[tau,w,a,k_1,k_2]);
 
 % Objective term
-x_ref = SX.sym('x_ref');
-L = (x_ref-x1)^2 + k*u^2;
+t = SX.sym('t');
+L = (ref(t)-x1)^2 + k*u^2;
 
 % Formulate discrete time dynamics
 %p=[u, w, a, k_1, k_2]';
@@ -57,17 +57,13 @@ L = (x_ref-x1)^2 + k*u^2;
 %opts = struct('abstol', 1e-8, 'reltol', 1e-8,'tf',1/fs);
 %F = integrator('F', 'cvodes', odestruct, opts);
 %Loss=Function('Loss', {x,x_ref, u}, {L});
-p = [x_ref, u, w, a, k_1, k_2]';
-F = rk4integrator(x, p, xdot, L, 1/fs);
+F = rk4integrator(x, p, u, t, xdot, L, 1/fs);
 
 
 %% MPC Simulation
-import casadi.*
+X_applied=x0;
 U_applied=[];
-X_applied=[];
-X_generated=x0;   %initial conditions
-i_next_mpc = 1;
-for i = 1:shift:N
+for i = 0:shift:N-1
     %% Formulate NLP
     % Start with an empty NLP
     w={};
@@ -82,9 +78,9 @@ for i = 1:shift:N
     % "Lift" initial conditions
     Xk = MX.sym('X0', 2);
     w = {w{:}, Xk};
-    lbw = [lbw; X_generated(1); X_generated(2)];
-    ubw = [ubw; X_generated(1); X_generated(2)];
-    w0 = [w0; X_generated(1); X_generated(2)];
+    lbw = [lbw; X_applied(:,end)];
+    ubw = [ubw; X_applied(:,end)];
+    w0  = [w0;  X_applied(:,end)];
 
     %TODO: initialize w0 with previous guess
     for k=0:N_mpc-1
@@ -96,7 +92,7 @@ for i = 1:shift:N
         w0 = [w0;  0];
 
         % Integrate till the end of the interval
-        Fk = F('x0', Xk, 'p', [ref(i+k), Uk, param]);
+        Fk = F('x0',Xk, 'p',param, 'u',Uk, 't',ts*(i+k));
         Xk_end = Fk.xf;
         J = J+Fk.qf;
 
@@ -120,26 +116,25 @@ for i = 1:shift:N
     solver = nlpsol('solver', 'ipopt', prob, options);
 
     % Solve the NLP
-    sol = solver('x0', w0, 'lbx', lbw, 'ubx', ubw ,...
-                'lbg', lbg, 'ubg', ubg);
+    sol = solver('x0',w0, 'lbx',lbw, 'ubx',ubw, 'lbg',lbg, 'ubg',ubg);
     w_opt = full(sol.x);
 
     u_opt = w_opt(3:3:end);
     for k=0:shift-1
         U_applied = [U_applied, u_opt(k+1)];
-        X_generated = F('x0', X_generated, 'p', [ref(i+k), U_applied(end), param]);
-        X_generated = (full(X_generated.xf))+normrnd(0,sigma,[2,1]);
-        X_applied = [X_applied, X_generated];
+        Fk = F('x0',X_applied(:,end), 'p',param, 'u',U_applied(end), 't',ts*(i+k));
+        X_applied = [X_applied, full(Fk.xf)+normrnd(0,sigma,[2,1])];
     end
 end
 
-% Plot the solution
+%% Plot the solution
 figure;
 hold on
-plot(t, ref(1:N))
-plot(t, X_applied(1,:), '-')
-plot(t, X_applied(2,:), '--')
-stairs(t, U_applied, '-.')
+time = ts*(0:N);
+plot(time, ref(time))
+plot(time, X_applied(1,:), '-')
+plot(time, X_applied(2,:), '--')
+stairs(time, U_applied([1:N N]), '-.')
 xlabel('t')
 legend('x_ref','x1','x2','u')
 
@@ -166,22 +161,22 @@ function f = ode(X, u, p)
 end
 
 
-function F = rk4integrator(x, p, xdot, L, T)
+function F = rk4integrator(x, p, u, t, xdot, L, T)
    % Fixed step Runge-Kutta 4 integrator
    M = 1;%4; % RK4 steps per interval
    DT = T/M;
-   f = casadi.Function('f', {x, p}, {xdot, L});
-   X0 = x;%MX.sym('X0', 2);
-   P = p;%MX.sym('U');
+   f = casadi.Function('f', {x, p, u, t}, {xdot, L});
+   X0 = x;
+   P = p;
    X = X0;
    Q = 0;
    for j=1:M
-       [k1, k1_q] = f(X, P);
-       [k2, k2_q] = f(X + DT/2 * k1, P);
-       [k3, k3_q] = f(X + DT/2 * k2, P);
-       [k4, k4_q] = f(X + DT * k3, P);
+       [k1, k1_q] = f(X, P, u, t);
+       [k2, k2_q] = f(X + DT/2 * k1, P, u, t + DT/2);
+       [k3, k3_q] = f(X + DT/2 * k2, P, u, t + DT/2);
+       [k4, k4_q] = f(X + DT   * k3, P, u, t + DT);
        X=X+DT/6*(k1 +2*k2 +2*k3 +k4);
        Q = Q + DT/6*(k1_q + 2*k2_q + 2*k3_q + k4_q);
     end
-    F = casadi.Function('F', {X0, P}, {X, Q}, {'x0','p'}, {'xf', 'qf'});
+    F = casadi.Function('F', {X0, P, u, t}, {X, Q}, {'x0','p','u','t'}, {'xf','qf'});
 end
