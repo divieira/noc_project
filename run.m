@@ -16,7 +16,7 @@ tau = 1.0;      % s (arbitrary stiffness constant)
 sigma = 0.1;    % disturbance on each simulation step
 
 % Objective
-k = .1;     % control cost
+k = 100.0;     % control cost
 
 % MPC
 shift = 1;  % MPC interval
@@ -61,16 +61,19 @@ tic
 toc
 
 %% Plot the solution
-figure;
+figure(1);
+subplot(3,2,1)
 hold on
 time = ts*(0:N);
 plot(time, ref(time))
 plot(time, X_applied(1,:), '-')
 plot(time, X_applied(2,:), '--')
 stairs(time, U_applied([1:N N]), '-.')
-xlabel('t')
-legend('x_ref','x1','x2','u')
+xlabel('t [s]')
+legend('x_{ref} [mV]','x1 [mV]','x2 [mV]','u [arb. Unit]')
 
+fprintf("Control Energy: %d arb. Unit^2\n", sum(U_applied.^2));
+fprintf("MSE: %d (mV)^2\n", mean((X_applied(1,:)-ref(time)).^2));
 
 %% Function definitions
 function f = ode(X, u, p)

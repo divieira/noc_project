@@ -62,7 +62,8 @@ for i = 0:shift:N-1
     % Create an NLP solver
     prob = struct('f', J, 'x', vertcat(w{:}) , 'g', vertcat(g{:}));
     options = struct;
-    %options.ipopt.max_iter = 3; %FIXME: really necessary?
+    options.ipopt.max_iter = 6; %Set maximum Iterations - normally 4 Iterations are enough
+    options.ipopt.print_level=0;
     solver = nlpsol('solver', 'ipopt', prob, options);
 
     % Solve the NLP
