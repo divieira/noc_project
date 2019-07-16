@@ -56,8 +56,9 @@ F = rk4integrator(x, p, u, t, xdot, L, 1/fs);
 
 %% Run MPC Simulation
 rng default; % Fix RNG for reproducibility
+tic
 [X_applied, U_applied] = MPC(F, x0, param, sigma, N, N_mpc, shift, ts);
-
+toc
 
 %% Plot the solution
 figure;

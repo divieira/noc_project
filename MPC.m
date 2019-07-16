@@ -6,9 +6,9 @@ import casadi.*
 X_applied=x0;
 U_applied=[];
 %Init for warm start X, u =0
-x1_opt=zeros(N_mpc+shift,1);
-x2_opt=zeros(N_mpc+shift,1);
-u_opt=zeros(N_mpc+shift,1);
+x1_opt=zeros(N_mpc,1);
+x2_opt=zeros(N_mpc,1);
+u_opt=zeros(N_mpc,1);
 
 for i = 0:shift:N-1
     %% Formulate NLP
@@ -30,9 +30,9 @@ for i = 0:shift:N-1
     w0  = [w0;  X_applied(:,end)];
 
     %Create values for warmstart
-    x1_opt=[x1_opt; zeros(shift,1)];
-    x2_opt=[x2_opt; zeros(shift,1)];
-    u_opt=[u_opt; zeros(shift,1)];
+    x1_opt(end+1:end+shift) = x1_opt(end);
+    x2_opt(end+1:end+shift) = x2_opt(end);
+    u_opt(end+1:end+shift)  = u_opt(end);
     for k=0:N_mpc-1
         % New NLP variable for the control
         Uk = MX.sym(['U_' num2str(k)]);
