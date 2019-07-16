@@ -63,6 +63,11 @@ F = rk4integrator(x, p, u, t, xdot, L, 1/fs);
 %% MPC Simulation
 X_applied=x0;
 U_applied=[];
+%Init for warm start X, u =0
+x1_opt=zeros(N_mpc+shift,1);
+x2_opt=zeros(N_mpc+shift,1);
+u_opt=zeros(N_mpc+shift,1);
+
 for i = 0:shift:N-1
     %% Formulate NLP
     % Start with an empty NLP
@@ -82,14 +87,17 @@ for i = 0:shift:N-1
     ubw = [ubw; X_applied(:,end)];
     w0  = [w0;  X_applied(:,end)];
 
-    %TODO: initialize w0 with previous guess
+    %Create values for warmstart
+    x1_opt=[x1_opt; zeros(shift,1)];
+    x2_opt=[x2_opt; zeros(shift,1)];
+    u_opt=[u_opt; zeros(shift,1)];
     for k=0:N_mpc-1
         % New NLP variable for the control
         Uk = MX.sym(['U_' num2str(k)]);
         w = {w{:}, Uk};
         lbw = [lbw; -1];
         ubw = [ubw;  1];
-        w0 = [w0;  0];
+        w0 = [w0;  u_opt(shift+1+k)];
 
         % Integrate till the end of the interval
         Fk = F('x0',Xk, 'p',param, 'u',Uk, 't',ts*(i+k));
@@ -101,7 +109,7 @@ for i = 0:shift:N-1
         w = [w, {Xk}];
         lbw = [lbw; -inf; -inf];
         ubw = [ubw;  inf;  inf];
-        w0 = [w0; 0; 0];
+        w0 = [w0; x1_opt(shift+1+k); x2_opt(shift+1+k)];
 
         % Add equality constraint
         g = [g, {Xk_end-Xk}];
@@ -118,7 +126,8 @@ for i = 0:shift:N-1
     % Solve the NLP
     sol = solver('x0',w0, 'lbx',lbw, 'ubx',ubw, 'lbg',lbg, 'ubg',ubg);
     w_opt = full(sol.x);
-
+    x1_opt=w_opt(1:3:end);
+    x2_opt=w_opt(2:3:end);
     u_opt = w_opt(3:3:end);
     for k=0:shift-1
         U_applied = [U_applied, u_opt(k+1)];
