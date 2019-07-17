@@ -11,7 +11,7 @@ fs = 120;       % Hz
 T = 2.5;          % s
 N = T*fs;       % steps
 ts = 1/fs;      % s
-x0 = [1; 0];    % initial conditions
+x0 = [0; 0];    % initial conditions
 
 % Model
 param = [2*pi*6 .01 -1e3 0]; % [w, a, k1, k2]
@@ -104,11 +104,11 @@ sgtitle('Optimize k - cost of control energy','fontweight','bold','fontsize',Fon
 
 set(gcf,'Units','points')
 set(gcf,'PaperUnits','points')
-size = get(gcf,'Position');
+sizeP = get(gcf,'Position');
 
-size = size(3:4);
-set(gcf,'PaperSize',size)
-set(gcf,'PaperPosition',[0,0,size(1),size(2)])
+sizeP = sizeP(3:4);
+set(gcf,'PaperSize',sizeP)
+set(gcf,'PaperPosition',[0,0,sizeP(1),sizeP(2)])
 
 print(gcf,'OptimizeK','-depsc','-loose'); % Save figure as .eps file
 
@@ -149,7 +149,7 @@ time = ts*(0:N);
 plot(time, ref(time))
 plot(time, X_applied(1,:), '-')
 plot(time, X_applied(2,:), '--')
-stairs(time, U_applied([1:N N]), '-.')
+stairs(time, U_applied([1:N N]), '-.','LineWidth',2)
 set(gca,'FontSize',FontSAxis);
 xlabel('t [s]','fontweight','bold','fontsize',FontSLabel)
 legend('x_{ref} [mV]','x1 [mV]','x2 [mV]','u [arb. Unit]', 'Location', 'none', 'Position', [0.78 0.82 0.1433 0.1560])
@@ -167,7 +167,7 @@ time = ts*(0:N);
 plot(time, ref(time))
 plot(time, X_applied(1,:), '-')
 plot(time, X_applied(2,:), '--')
-stairs(time, U_applied([1:N N]), '-.')
+stairs(time, U_applied([1:N N]), '-.','LineWidth',2)
 set(gca,'FontSize',FontSAxis);
 xlabel('t [s]','fontweight','bold','fontsize',FontSLabel)
 title({"Noise \sigma^2=" + sigma^2 + "(mV)^2", "MSE= " + num2str((mean((X_applied(1,:)-ref(time)).^2)),'%10.5e\n')+ "(mV)^2"},'fontweight','bold','fontsize',FontSTitle)
@@ -177,11 +177,11 @@ sgtitle('Multiple shooting','fontweight','bold','fontsize',FontSSGTitle)
 
 set(gcf,'Units','points')
 set(gcf,'PaperUnits','points')
-size = get(gcf,'Position');
+sizeP = get(gcf,'Position');
 
-size = size(3:4);
-set(gcf,'PaperSize',size)
-set(gcf,'PaperPosition',[0,0,size(1),size(2)])
+sizeP = sizeP(3:4);
+set(gcf,'PaperSize',sizeP)
+set(gcf,'PaperPosition',[0,0,sizeP(1),sizeP(2)])
 
 print(gcf,'MultipleShooting','-depsc','-loose'); % Save figure as .eps file
 %% plot MPC
@@ -210,7 +210,7 @@ time = ts*(0:N);
 plot(time, ref(time))
 plot(time, X_applied(1,:), '-')
 plot(time, X_applied(2,:), '--')
-stairs(time, U_applied([1:N N]), '-.')
+stairs(time, U_applied([1:N N]), '-.','LineWidth',2)
 set(gca,'FontSize',FontSAxis);
 xlabel('t [s]','fontweight','bold','fontsize',FontSLabel)
 legend('x_{ref} [mV]','x1 [mV]','x2 [mV]','u [arb. Unit]', 'Location', 'none', 'Position', [0.78 0.82 0.1433 0.1560])
@@ -228,7 +228,7 @@ time = ts*(0:N);
 plot(time, ref(time))
 plot(time, X_applied(1,:), '-')
 plot(time, X_applied(2,:), '--')
-stairs(time, U_applied([1:N N]), '-.')
+stairs(time, U_applied([1:N N]), '-.','LineWidth',2)
 set(gca,'FontSize',FontSAxis);
 xlabel('t [s]','fontweight','bold','fontsize',FontSLabel)
 title({"Noise \sigma^2=" + sigma^2 + "(mV)^2", "MSE= " + num2str((mean((X_applied(1,:)-ref(time)).^2)),'%10.5e\n')+ "(mV)^2"},'fontweight','bold','fontsize',FontSTitle)
@@ -238,11 +238,11 @@ sgtitle('Model Predicte Control','fontweight','bold','fontsize',FontSSGTitle)
 
 set(gcf,'Units','points')
 set(gcf,'PaperUnits','points')
-size = get(gcf,'Position');
+sizeP = get(gcf,'Position');
 
-size = size(3:4);
-set(gcf,'PaperSize',size)
-set(gcf,'PaperPosition',[0,0,size(1),size(2)])
+sizeP = sizeP(3:4);
+set(gcf,'PaperSize',sizeP)
+set(gcf,'PaperPosition',[0,0,sizeP(1),sizeP(2)])
 
 print(gcf,'MPC','-depsc','-loose'); % Save figure as .eps file
 
@@ -251,10 +251,21 @@ print(gcf,'MPC','-depsc','-loose'); % Save figure as .eps file
 
 %% plot MPC with parameter change
 %parameters
+T = 5;          % s
+N = T*fs;       % steps
+
 sigma = 0.0;    % disturbance on each simulation step
 % MPC
 shift = 1;  % MPC interval
 N_mpc = 10; % MPC horizon
+
+% Reference
+f_ref = 8;      % Hz
+a_ref = .5;     % mV
+t2_ref = 2.5;   % s
+a2_ref = .0;    % mV
+ref = @(t) a_ref*sin(2*pi*f_ref*t) + a2_ref*heaviside(t-t2_ref).*sin(2*pi*f_ref*t);
+
 
 % Objective
 k = 100.0;     % control cost
@@ -265,16 +276,17 @@ F = rk4integrator(x, p, u, t, xdot, L, 1/fs);
 % Run MPC Simulation without noise
 rng default; % Fix RNG for reproducibility
 
-%norm=(0.25+time./T*1.5)';
-param2 = repmat(param,N/3,1);
-param2=[param2;2.5*param2;0.4*param2; 0.4*param];
-%param2=norm*param;
+time = ts*(0:N);
+normW=(1+1.5*heaviside(time-0.5)-2.1*heaviside(time-1.0)+0.6*heaviside(time-1.5))';
+normK1=(1+1.5*heaviside(time-2)-2.1*heaviside(time-2.5)+0.6*heaviside(time-3.0))';
+normA=(1+1.5*heaviside(time-3.5)-2.1*heaviside(time-4.0)+0.6*heaviside(time-4.5))';
+normOnes=ones(size(time,2),1);
+param2=[normW*param(1),normA*param(2),normK1*param(3),normOnes*param(4)];
 
 % Plot the normalized parametrs
 figure('Renderer', 'painters', 'Position', [10 10 800 600])
 subplot(2,1,1)
 hold on
-time = ts*(0:N);
 for ii=1:4
     plot(time, param2(:,ii)/param(:,ii))
 end
@@ -293,23 +305,23 @@ time = ts*(0:N);
 plot(time, ref(time))
 plot(time, X_applied(1,:), '-')
 plot(time, X_applied(2,:), '--')
-stairs(time, U_applied([1:N N]), '-.')
+stairs(time, U_applied([1:N N]), '-.','LineWidth',2)
 set(gca,'FontSize',FontSAxis);
 xlabel('t [s]','fontweight','bold','fontsize',FontSLabel)
 title({"Noise \sigma^2=" + sigma^2 + "(mV)^2", "MSE= " + num2str((mean((X_applied(1,:)-ref(time)).^2)),'%10.5e\n')+ "(mV)^2"},'fontweight','bold','fontsize',FontSTitle)
-
+legend('w/w_0','a/a_0','k_1/k_{1,0}','k_2/k_{2,0}', 'Location', 'none', 'Position', [0.78 0.28 0.1433 0.1560])
 
 sgtitle('Model Predicte Control with disturbance of Model','fontweight','bold','fontsize',FontSSGTitle)
 
 set(gcf,'Units','points')
 set(gcf,'PaperUnits','points')
-size = get(gcf,'Position');
+sizeP = get(gcf,'Position');
 
-size = size(3:4);
-set(gcf,'PaperSize',size)
-set(gcf,'PaperPosition',[0,0,size(1),size(2)])
+sizeP = sizeP(3:4);
+set(gcf,'PaperSize',sizeP)
+set(gcf,'PaperPosition',[0,0,sizeP(1),sizeP(2)])
 
-print(gcf,'MPC','-depsc','-loose'); % Save figure as .eps file
+print(gcf,'MPC_ParameterDisturb','-depsc','-loose'); % Save figure as .eps file
 %% Function definitions
 function f = ode(X, u, p)
     % State transition function f, specified as a function handle.
