@@ -1,6 +1,16 @@
-function [X_applied, U_applied] = MPC(F, x0, param, sigma, N, N_mpc, shift, ts)
+function [X_applied, U_applied] = MPC(F, x0, param, sigma, N, N_mpc, shift, ts,varargin)
 % See: CasADi example direct_multiple_shooting.m
 import casadi.*
+narginchk(8,9);
+%dfine paramlist of simulation, if no param is defined use same as for MPC
+%otherwise use array which contains in every row the value for that
+%simulation step
+if nargin~=9
+    param2=repmat(param,N,1);
+else
+    param2=varargin{1};
+end
+
 
 %% MPC Simulation
 X_applied=x0;
@@ -74,7 +84,7 @@ for i = 0:shift:N-1
     u_opt = w_opt(3:3:end);
     for k=0:shift-1
         U_applied = [U_applied, u_opt(k+1)];
-        Fk = F('x0',X_applied(:,end), 'p',param, 'u',U_applied(end), 't',ts*(i+k));
+        Fk = F('x0',X_applied(:,end), 'p',param2(1+i+k,:), 'u',U_applied(end), 't',ts*(i+k));
         X_applied = [X_applied, full(Fk.xf)+normrnd(0,sigma,[2,1])];
     end
 end
