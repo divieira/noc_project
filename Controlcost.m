@@ -246,6 +246,70 @@ set(gcf,'PaperPosition',[0,0,size(1),size(2)])
 
 print(gcf,'MPC','-depsc','-loose'); % Save figure as .eps file
 
+
+
+
+%% plot MPC with parameter change
+%parameters
+sigma = 0.0;    % disturbance on each simulation step
+% MPC
+shift = 1;  % MPC interval
+N_mpc = 10; % MPC horizon
+
+% Objective
+k = 100.0;     % control cost
+L = (ref(t)-x1)^2 + k*u^2;
+% Formulate discrete time dynamics
+F = rk4integrator(x, p, u, t, xdot, L, 1/fs);
+
+% Run MPC Simulation without noise
+rng default; % Fix RNG for reproducibility
+
+%norm=(0.25+time./T*1.5)';
+param2 = repmat(param,N/3,1);
+param2=[param2;2.5*param2;0.4*param2; 0.4*param];
+%param2=norm*param;
+
+% Plot the normalized parametrs
+figure('Renderer', 'painters', 'Position', [10 10 800 600])
+subplot(2,1,1)
+hold on
+time = ts*(0:N);
+for ii=1:4
+    plot(time, param2(:,ii)/param(:,ii))
+end
+set(gca,'FontSize',FontSAxis);
+xlabel('t [s]','fontweight','bold','fontsize',FontSLabel)
+legend('w/w_0','a/a_0','k_1/k_{1,0}','k_2/k_{2,0}', 'Location', 'none', 'Position', [0.78 0.82 0.1433 0.1560])
+title({"Normalized Parameters"},'fontweight','bold','fontsize',FontSTitle)
+
+
+[X_applied, U_applied] = MPC(F, x0, param, sigma, N, N_mpc, shift, ts,param2);
+
+% Plot the solution
+subplot(2,1,2)
+hold on
+time = ts*(0:N);
+plot(time, ref(time))
+plot(time, X_applied(1,:), '-')
+plot(time, X_applied(2,:), '--')
+stairs(time, U_applied([1:N N]), '-.')
+set(gca,'FontSize',FontSAxis);
+xlabel('t [s]','fontweight','bold','fontsize',FontSLabel)
+title({"Noise \sigma^2=" + sigma^2 + "(mV)^2", "MSE= " + num2str((mean((X_applied(1,:)-ref(time)).^2)),'%10.5e\n')+ "(mV)^2"},'fontweight','bold','fontsize',FontSTitle)
+
+
+sgtitle('Model Predicte Control with disturbance of Model','fontweight','bold','fontsize',FontSSGTitle)
+
+set(gcf,'Units','points')
+set(gcf,'PaperUnits','points')
+size = get(gcf,'Position');
+
+size = size(3:4);
+set(gcf,'PaperSize',size)
+set(gcf,'PaperPosition',[0,0,size(1),size(2)])
+
+print(gcf,'MPC','-depsc','-loose'); % Save figure as .eps file
 %% Function definitions
 function f = ode(X, u, p)
     % State transition function f, specified as a function handle.
