@@ -309,7 +309,7 @@ stairs(time, U_applied([1:N N]), '-.','LineWidth',2)
 set(gca,'FontSize',FontSAxis);
 xlabel('t [s]','fontweight','bold','fontsize',FontSLabel)
 title({"Noise \sigma^2=" + sigma^2 + "(mV)^2", "MSE= " + num2str((mean((X_applied(1,:)-ref(time)).^2)),'%10.5e\n')+ "(mV)^2"},'fontweight','bold','fontsize',FontSTitle)
-legend('w/w_0','a/a_0','k_1/k_{1,0}','k_2/k_{2,0}', 'Location', 'none', 'Position', [0.78 0.28 0.1433 0.1560])
+legend('x_{ref} [mV]','x1 [mV]','x2 [mV]','u [arb. Unit]', 'Location', 'none', 'Position', [0.78 0.34 0.1433 0.1560])
 
 sgtitle('Model Predicte Control with disturbance of Model','fontweight','bold','fontsize',FontSSGTitle)
 
