@@ -82,6 +82,7 @@ for i = 0:shift:N-1
     x1_opt=w_opt(1:3:end);
     x2_opt=w_opt(2:3:end);
     u_opt = w_opt(3:3:end);
+    % Apply control steps to plant
     for k=0:shift-1
         U_applied = [U_applied, u_opt(k+1)];
         Fk = F('x0',X_applied(:,end), 'p',param2(1+i+k,:), 'u',U_applied(end), 't',ts*(i+k));

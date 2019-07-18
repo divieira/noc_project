@@ -5,7 +5,7 @@ close all
 import casadi.*
 
 
-% Plots
+% Plot Fonts
 FontSTitle=11;
 FontSAxis=12;
 FontSSGTitle=14;
@@ -116,7 +116,7 @@ set(gcf,'PaperPosition',[0,0,sizeP(1),sizeP(2)])
 
 print(gcf,'MultipleShooting','-depsc','-loose'); % Save figure as .eps file
 %% plot MPC
-%parameters
+%parameters for indeoendent runs
 shift_sim=[1 3 5 10];
 N_mpc_vec=[10 10 15 20];
 for idxShift=1:size(shift_sim,2)
@@ -265,7 +265,7 @@ for idxShift=1:size(shift_sim,2)
     print(gcf,printstr,'-depsc','-loose'); % Save figure as .eps file
 
 
-    %% Run MPC Simulation optimize k
+    %% Run MPC Simulation to optimize k
     T = 5;          % s
     N = T*fs;       % steps
     sigma = 0.05;
