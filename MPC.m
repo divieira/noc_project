@@ -39,7 +39,7 @@ for i = 0:shift:N-1
     ubw = [ubw; X_applied(:,end)];
     w0  = [w0;  X_applied(:,end)];
 
-    %Create values for warmstart
+    % Extend values for warm starting
     x1_opt(end+1:end+shift) = x1_opt(end);
     x2_opt(end+1:end+shift) = x2_opt(end);
     u_opt(end+1:end+shift)  = u_opt(end);
@@ -47,8 +47,8 @@ for i = 0:shift:N-1
         % New NLP variable for the control
         Uk = MX.sym(['U_' num2str(k)]);
         w = {w{:}, Uk};
-        lbw = [lbw; -1];
-        ubw = [ubw;  1];
+        lbw = [lbw; 0];
+        ubw = [ubw; 1];
         w0 = [w0;  u_opt(shift+1+k)];
 
         % Integrate till the end of the interval
@@ -72,7 +72,7 @@ for i = 0:shift:N-1
     % Create an NLP solver
     prob = struct('f', J, 'x', vertcat(w{:}) , 'g', vertcat(g{:}));
     options = struct;
-    options.ipopt.max_iter = 6; %Set maximum Iterations - normally 4 Iterations are enough
+%     options.ipopt.max_iter = 6; %Set maximum iterations - normally 4 iterations are enough
     options.ipopt.print_level=0;
     solver = nlpsol('solver', 'ipopt', prob, options);
 
@@ -82,11 +82,12 @@ for i = 0:shift:N-1
     x1_opt=w_opt(1:3:end);
     x2_opt=w_opt(2:3:end);
     u_opt = w_opt(3:3:end);
+
     % Apply control steps to plant
     for k=0:shift-1
         U_applied = [U_applied, u_opt(k+1)];
         Fk = F('x0',X_applied(:,end), 'p',param2(1+i+k,:), 'u',U_applied(end), 't',ts*(i+k));
-        X_applied = [X_applied, full(Fk.xf)+normrnd(0,sigma,[2,1])];
+        X_applied = [X_applied, full(Fk.xf)+normrnd(0,ts*sigma,[2,1])];
     end
 end
 end
