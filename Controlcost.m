@@ -27,6 +27,10 @@ N = T*fs;       % steps
 ts = 1/fs;      % s
 x0 = [.5; 0];    % initial conditions
 
+%parameters for independent runs - MPC
+shift_sim=[1 5 10];
+N_mpc_vec=[20 20 20];
+
 % Model for optimization
 param = [2*pi*6 .01 -1e2 0]; % [w, a, k1, k2]
 tau = 1.0;      % s (arbitrary stiffness constant)
@@ -56,13 +60,45 @@ u = SX.sym('u');
 xdot = ode(x,u,[tau,w,a,k_1,k_2]);
 t = SX.sym('t');
 
-%% Multiple shooting
-% Objective
-k = .01;     % control cost
-L = (ref(t)-x1)^2 + k*u^2;
-
+%% Uncontrolled System
 % Formulate discrete time dynamics
 F = rk4integrator(x, p, u, t, xdot, L, 1/fs);
+time = ts*(0:N);
+x_0=[1; -0.1];
+X=[];
+X=[X, x_0];
+for ii=2:size(time,2)
+    Fk = F('x0',X(:,ii-1), 'p',param, 'u',0, 't',time(ii));
+    X = [X, full(Fk.xf)];
+end
+% Plot the solution
+figure('Renderer', 'painters', 'Position', [10 10 800 600])
+hold on;
+plot(time, X(1,:), '-')
+plot(time, X(2,:), '--')
+set(gca,'FontSize',FontSAxis);
+xlabel('t [s]','fontweight','bold','fontsize',FontSLabel)
+ylabel('u [mV]','fontweight','bold','fontsize',FontSLabel)
+legend('x1','x2', 'Location', 'none', 'Position', [0.78 0.82 0.1433 0.1560])
+title('Plant','fontweight','bold','fontsize',FontSTitle)
+axis([0 T -1.6 1.6])
+
+set(gcf,'Units','points')
+set(gcf,'PaperUnits','points')
+sizeP = get(gcf,'Position');
+
+sizeP = sizeP(3:4);
+set(gcf,'PaperSize',sizeP)
+set(gcf,'PaperPosition',[0,0,sizeP(1),sizeP(2)])
+
+print(gcf,figpath+'Plant','-depsc','-loose'); % Save figure as .eps file
+
+%% Multiple shooting
+% Objective
+alpha = .01;     % control cost
+L = (ref(t)-x1)^2 + alpha*u^2;
+
+
 
 noiseLevel=10;
 %% plot Multiple Shooting
@@ -118,9 +154,6 @@ set(gcf,'PaperPosition',[0,0,sizeP(1),sizeP(2)])
 
 print(gcf,figpath+'MultipleShooting','-depsc','-loose'); % Save figure as .eps file
 %% plot MPC
-%parameters for independent runs
-shift_sim=[1 5 10];
-N_mpc_vec=[20 20 20];
 for idxShift=1:length(shift_sim)
     %% Multiple shooting and MPC
     %shorter TimeFrame to obtain better visualization
@@ -186,6 +219,8 @@ for idxShift=1:length(shift_sim)
     printstr=figpath+"MPC"+int2str(shift)+"_"+int2str(N_mpc);
     print(gcf,printstr,'-depsc','-loose'); % Save figure as .eps file
     
+end
+    
     %% plot MPC with parameter change
     %parameters
     T = 5;          % s
@@ -197,8 +232,6 @@ for idxShift=1:length(shift_sim)
     %shift = 1;  % MPC interval
     %N_mpc = 10; % MPC horizon
 
-
-    sigma = 0.0;    % disturbance on each simulation step
 
     % Reference
     f_ref = 8;      % Hz
@@ -215,7 +248,11 @@ for idxShift=1:length(shift_sim)
     normK1=(1+1*heaviside(time-3.5)-1.5*heaviside(time-4.0)+0.5*heaviside(time-4.5))';
     normOnes=ones(size(time,2),1);
     param2=[normW*param(1),normA*param(2),normK1*param(3),normOnes*param(4)];
-
+for idxShift=1:length(shift_sim)
+     % MPC
+    shift = shift_sim(idxShift);  % MPC interval
+    N_mpc = N_mpc_vec(idxShift); % MPC horizon
+    
     % Plot the normalized parameters
     figure('Renderer', 'painters', 'Position', [10 10 800 600])
     subplot(2,1,1)
@@ -259,11 +296,13 @@ for idxShift=1:length(shift_sim)
     
     printstr=figpath+"MPC_ParameterDisturb"+int2str(shift)+"_"+int2str(N_mpc);
     print(gcf,printstr,'-depsc','-loose'); % Save figure as .eps file
-
+end
 
     %% Run MPC Simulation to optimize k
     T = 5;          % s
     N = T*fs;       % steps
+    
+    sigma = 10;    % disturbance on each simulation step
 
     % Reference
     f_ref = 8;      % Hz
@@ -272,38 +311,48 @@ for idxShift=1:length(shift_sim)
     a2_ref = .0;    % mV
     ref = @(t) a_ref*cos(2*pi*f_ref*t) + a2_ref*heaviside(t-t2_ref).*cos(2*pi*f_ref*t);
 
-
-    rng default; % Fix RNG for reproducibility
-    k = logspace(-4,1,12);
-    MSE=zeros(size(k,2),1);
-    MeanControlEnergy=zeros(size(k,2),1);
+    alpha = logspace(-4,2,12);
+    figure('Renderer', 'painters', 'Position', [10 10 800 600])
+    
+for idxShift=1:length(shift_sim)
+    % MPC
+    shift = shift_sim(idxShift);  % MPC interval
+    N_mpc = N_mpc_vec(idxShift); % MPC horizon
+    MSE=zeros(size(alpha,2),1);
+    MeanControlEnergy=zeros(size(alpha,2),1);
     time = ts*(0:N);
-    for jj=1:size(k,2)
+    for jj=1:size(alpha,2)
         % Objective term
-        Lk = (ref(t)-x1)^2 + k(jj)*u^2;
+        Lk = (ref(t)-x1)^2 + alpha(jj)*u^2;
         % Formulate discrete time dynamics
         F = rk4integrator(x, p, u, t, xdot, Lk, 1/fs);
         [X_applied, U_applied] = MPC(F, x0, param, sigma, N, N_mpc, shift, ts);
         MeanControlEnergy(jj)=mean(U_applied.^2);
         MSE(jj)=mean((X_applied(1,:)-ref(time)).^2);
     end
-    %toc
 
-    % Plot the results
-    figure('Renderer', 'painters', 'Position', [10 10 800 600])
+    % Plot the results  
     subplot(2,1,1)
-    semilogx(k,MeanControlEnergy)
+    legendEntry="Shift: " + num2str(shift);
+    semilogx(alpha,MeanControlEnergy,'DisplayName', legendEntry)
+    hold on;
+    subplot(2,1,2)
+    semilogx(alpha,MSE)
+    hold on
+end
+    subplot(2,1,1)
     set(gca,'FontSize',FontSAxis);
-    xlabel('Control cost factor k','fontweight','bold','fontsize',FontSLabel)
+    xlabel('Control cost factor /alpha','fontweight','bold','fontsize',FontSLabel)
     ylabel('Mean control energy [a.u.^2]','fontweight','bold','fontsize',FontSLabel)
     title("Shift = " + int2str(shift) +", Horizon = "+int2str(N_mpc))
+    legend
     subplot(2,1,2)
-    semilogx(k,MSE)
     set(gca,'FontSize',FontSAxis);
-    xlabel('Control cost factor k','fontweight','bold','fontsize',FontSLabel)
+    xlabel('Control cost factor /alpha','fontweight','bold','fontsize',FontSLabel)
     ylabel('MSE [mV^2]','fontweight','bold','fontsize',FontSLabel)
     str1="Noise \sigma^2 = " + sigma^2 + "(mV)^2";
     title({str1},'fontweight','bold','fontsize',FontSTitle)
+    
     sgtitle('MSE vs control cost','fontweight','bold','fontsize',FontSSGTitle)
 
 
@@ -317,7 +366,6 @@ for idxShift=1:length(shift_sim)
     
     printstr=figpath+"OptimizeK"+int2str(shift)+"_"+int2str(N_mpc);
     print(gcf,printstr,'-depsc','-loose'); % Save figure as .eps file
-end
 %% Function definitions
 function f = ode(X, u, p)
     % State transition function f, specified as a function handle.
