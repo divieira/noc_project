@@ -21,15 +21,14 @@ rng default; % Fix RNG for reproducibility
 %many are redifined in the simulations to get a specific behavior or speed
 %Mainly relevant to multiple shooting and MPC
 % Simulation
-fs = 160;       % Hz
+fs = 500;       % Hz
 T = 1;        % s
 N = T*fs;       % steps
 ts = 1/fs;      % s
-x0 = [.5; 0];    % initial conditions
 
 % Model for optimization
 param = [2*pi*6 .01 -1e2 0]; % [w, a, k1, k2]
-tau = 0.001;      % s (arbitrary stiffness constant)
+tau = 0.1;      % s (arbitrary stiffness constant)
 
 
 %% Model definition
@@ -88,7 +87,7 @@ xlabel('t [s]','fontweight','bold','fontsize',FontSLabel)
 ylabel('u [mV]','fontweight','bold','fontsize',FontSLabel)
 legend('x1','x2', 'Location', 'none', 'Position', [0.78 0.82 0.1433 0.1560])
 title('Plant','fontweight','bold','fontsize',FontSTitle)
-axis([0 T -1.6 1.6])
+axis([0 T -0.1 0.1])
 
 set(gcf,'Units','points')
 set(gcf,'PaperUnits','points')
@@ -102,14 +101,21 @@ print(gcf,figpath+'Plant','-depsc','-loose'); % Save figure as .eps file
 
 figure('Renderer', 'painters', 'Position', [10 10 800 600])
 hold on;
-plot(X(1,:), X(2,:))
+plotHa=plot(X(1,:), X(2,:));
+set(get(get(plotHa,'Annotation'),'LegendInformation'),'IconDisplayStyle','off');
+plot(X(1,1),X(2,1),'r*')
+plot(X(1,end),X(2,end),'bo')
+
 plot(X2(1,:), X2(2,:))
+plot(X2(1,1),X2(2,1),'r*')
+plot(X2(1,end),X2(2,end),'bo')
 quiver(x,y,10*u,10*v,'LineWidth',0.8,'MaxHeadSize', 0.4)
 set(gca,'FontSize',FontSAxis);
 xlabel('x_1 [mV]','fontweight','bold','fontsize',FontSLabel)
 ylabel('x_2 [mV]','fontweight','bold','fontsize',FontSLabel)
 title('Plant','fontweight','bold','fontsize',FontSTitle)
 axis([-0.15 0.15 -0.15 0.15])
+legend('Start Point', 'End Point')
 
 set(gcf,'Units','points')
 set(gcf,'PaperUnits','points')
