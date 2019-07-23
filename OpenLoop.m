@@ -52,7 +52,7 @@ t = SX.sym('t');
 % Formulate discrete time dynamics
 F = rk4integrator(x, p, u, t, xdot, 0, 1/fs);
 time = ts*(0:1*N);
-x_0=[0.0; 0.05];
+x_0=[0.0; 0.09];
 X=[];
 X=[X, x_0];
 for ii=2:size(time,2)
@@ -60,14 +60,14 @@ for ii=2:size(time,2)
     X = [X, full(Fk.xf)];
 end
 
-x2_0=[0.0; 0.15];
+x2_0=[0.0; 0.11];
 X2=[];
 X2=[X2, x2_0];
 for ii=2:size(time,2)
     Fk = F('x0',X2(:,ii-1), 'p',param, 'u',0, 't',time(ii));
     X2 = [X2, full(Fk.xf)];
 end
-[x,y] = meshgrid(-0.15:0.05:0.15,-0.15:0.05:0.15);
+[x,y] = meshgrid(-0.12:0.04:0.12,-0.12:0.04:0.12);
 u=zeros(size(x));
 for ii=1:size(x,1)
     for jj=1:size(x,2)
@@ -80,14 +80,16 @@ end
 % Plot the solution
 figure('Renderer', 'painters', 'Position', [10 10 800 600])
 hold on;
-plot(time, X(1,:), '-')
-plot(time, X(2,:), '--')
+plot(time, X(1,:))
+plot(time, X(2,:))
+plot(time,ones(size(time))*sqrt(param(2)),'k--')
+plot(time,-ones(size(time))*sqrt(param(2)),'k--')
 set(gca,'FontSize',FontSAxis);
 xlabel('t [s]','fontweight','bold','fontsize',FontSLabel)
 ylabel('u [mV]','fontweight','bold','fontsize',FontSLabel)
-legend('x1','x2', 'Location', 'none', 'Position', [0.78 0.82 0.1433 0.1560])
+legend('x1','x2','Limit cycle', 'Location', 'none', 'Position', [0.78 0.82 0.1433 0.1560])
 title('Plant','fontweight','bold','fontsize',FontSTitle)
-axis([0 T -0.1 0.1])
+axis([0 T -0.11 0.11])
 
 set(gcf,'Units','points')
 set(gcf,'PaperUnits','points')
@@ -101,21 +103,32 @@ print(gcf,figpath+'Plant','-depsc','-loose'); % Save figure as .eps file
 
 figure('Renderer', 'painters', 'Position', [10 10 800 600])
 hold on;
-plotHa=plot(X(1,:), X(2,:));
+plotHa=plot(X(1,:), X(2,:),'c-');
 set(get(get(plotHa,'Annotation'),'LegendInformation'),'IconDisplayStyle','off');
 plot(X(1,1),X(2,1),'r*')
 plot(X(1,end),X(2,end),'bo')
 
-plot(X2(1,:), X2(2,:))
+%limit cycle
+th = 0:pi/50:2*pi;
+xunit = sqrt(param(2)) * cos(th);
+yunit = sqrt(param(2)) * sin(th);
+plot(xunit, yunit, 'k--');
+
+
+
+plot(X2(1,:), X2(2,:),'m-')
 plot(X2(1,1),X2(2,1),'r*')
 plot(X2(1,end),X2(2,end),'bo')
+
 quiver(x,y,10*u,10*v,'LineWidth',0.8,'MaxHeadSize', 0.4)
+
+
 set(gca,'FontSize',FontSAxis);
 xlabel('x_1 [mV]','fontweight','bold','fontsize',FontSLabel)
 ylabel('x_2 [mV]','fontweight','bold','fontsize',FontSLabel)
 title('Plant','fontweight','bold','fontsize',FontSTitle)
-axis([-0.15 0.15 -0.15 0.15])
-legend('Start Point', 'End Point')
+axis(0.13*[-1 1 -1 1])
+legend('Start Point', 'End Point', 'Limit cycle')
 
 set(gcf,'Units','points')
 set(gcf,'PaperUnits','points')
