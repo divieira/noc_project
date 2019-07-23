@@ -33,7 +33,7 @@ N_mpc_vec=[20 20 20];
 
 % Model for optimization
 param = [2*pi*6 .01 -1e2 0]; % [w, a, k1, k2]
-tau = 1.0;      % s (arbitrary stiffness constant)
+tau = 0.1;      % s (arbitrary stiffness constant)
 
 % Reference for multiple shooting and MPC
 f_ref = 8;      % Hz
