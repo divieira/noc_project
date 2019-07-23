@@ -60,44 +60,12 @@ u = SX.sym('u');
 xdot = ode(x,u,[tau,w,a,k_1,k_2]);
 t = SX.sym('t');
 
-%% Uncontrolled System
-% Formulate discrete time dynamics
-F = rk4integrator(x, p, u, t, xdot, L, 1/fs);
-time = ts*(0:N);
-x_0=[1; -0.1];
-X=[];
-X=[X, x_0];
-for ii=2:size(time,2)
-    Fk = F('x0',X(:,ii-1), 'p',param, 'u',0, 't',time(ii));
-    X = [X, full(Fk.xf)];
-end
-% Plot the solution
-figure('Renderer', 'painters', 'Position', [10 10 800 600])
-hold on;
-plot(time, X(1,:), '-')
-plot(time, X(2,:), '--')
-set(gca,'FontSize',FontSAxis);
-xlabel('t [s]','fontweight','bold','fontsize',FontSLabel)
-ylabel('u [mV]','fontweight','bold','fontsize',FontSLabel)
-legend('x1','x2', 'Location', 'none', 'Position', [0.78 0.82 0.1433 0.1560])
-title('Plant','fontweight','bold','fontsize',FontSTitle)
-axis([0 T -1.6 1.6])
-
-set(gcf,'Units','points')
-set(gcf,'PaperUnits','points')
-sizeP = get(gcf,'Position');
-
-sizeP = sizeP(3:4);
-set(gcf,'PaperSize',sizeP)
-set(gcf,'PaperPosition',[0,0,sizeP(1),sizeP(2)])
-
-print(gcf,figpath+'Plant','-depsc','-loose'); % Save figure as .eps file
-
 %% Multiple shooting
 % Objective
 alpha = .01;     % control cost
 L = (ref(t)-x1)^2 + alpha*u^2;
-
+% Formulate discrete time dynamics
+F = rk4integrator(x, p, u, t, xdot, L, 1/fs);
 
 
 noiseLevel=10;
@@ -366,25 +334,5 @@ end
     
     printstr=figpath+"OptimizeK"+int2str(shift)+"_"+int2str(N_mpc);
     print(gcf,printstr,'-depsc','-loose'); % Save figure as .eps file
-%% Function definitions
-function f = ode(X, u, p)
-    % State transition function f, specified as a function handle.
-    % The function calculates the Ns-element state vector of the system at
-    % time step k, given the state vector at time step k-1.
-    % Ns is the number of states of the nonlinear system.
-    y = X(1);
-    x = X(2);
-
-    tau=p(1);
-    w=p(2); 
-    a=p(3); 
-    k1=p(4); 
-    k2=p(5);
-    
-    dy =  x*w + y*(a - x^2 - y^2)/tau + k1*u;
-    dx = -y*w + x*(a - x^2 - y^2)/tau + k2*u;
-    
-   f=[dy;dx];
-end
 
 
