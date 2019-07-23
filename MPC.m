@@ -15,69 +15,90 @@ end
 %% MPC Simulation
 X_applied=x0;
 U_applied=[];
-%Init for warm start X, u =0
-x1_opt=zeros(N_mpc,1);
-x2_opt=zeros(N_mpc,1);
-u_opt=zeros(N_mpc,1);
 
-for i = 0:shift:N-1
+
+
     %% Formulate NLP
     % Start with an empty NLP
     w={};
-    w0 = [];
-    lbw = [];
-    ubw = [];
     J = 0;
     g = {};
-    lbg = [];
-    ubg = [];
+
 
     % "Lift" initial conditions
-    Xk = MX.sym('X0', 2);
+    Xk = MX.sym('Xk', 2);
     w = {w{:}, Xk};
-    lbw = [lbw; X_applied(:,end)];
-    ubw = [ubw; X_applied(:,end)];
-    w0  = [w0;  X_applied(:,end)];
+    ik = MX.sym('ik', 1);
 
-    % Extend values for warm starting
-    x1_opt(end+1:end+shift) = x1_opt(end);
-    x2_opt(end+1:end+shift) = x2_opt(end);
-    u_opt(end+1:end+shift)  = u_opt(end);
+
+    
     for k=0:N_mpc-1
         % New NLP variable for the control
         Uk = MX.sym(['U_' num2str(k)]);
         w = {w{:}, Uk};
-        lbw = [lbw; 0];
-        ubw = [ubw; 1];
-        w0 = [w0;  u_opt(shift+1+k)];
-
         % Integrate till the end of the interval
-        Fk = F('x0',Xk, 'p',param, 'u',Uk, 't',ts*(i+k));
+        Fk = F('x0',Xk, 'p',param, 'u',Uk, 't',ts*(ik+k));
         Xk_end = Fk.xf;
         J = J+Fk.qf;
 
         % New NLP variable for state at end of interval
         Xk = MX.sym(['X_' num2str(k+1)], 2);
         w = [w, {Xk}];
-        lbw = [lbw; -inf; -inf];
-        ubw = [ubw;  inf;  inf];
-        w0 = [w0; x1_opt(shift+1+k); x2_opt(shift+1+k)];
 
         % Add equality constraint
         g = [g, {Xk_end-Xk}];
-        lbg = [lbg; 0; 0];
-        ubg = [ubg; 0; 0];
+
     end
 
     % Create an NLP solver
-    prob = struct('f', J, 'x', vertcat(w{:}) , 'g', vertcat(g{:}));
+    prob = struct('f', J, 'x', vertcat(w{:}) , 'g', vertcat(g{:}),'p',ik);
     options = struct;
-%     options.ipopt.max_iter = 6; %Set maximum iterations - normally 4 iterations are enough
-    options.ipopt.print_level=0;
+    %options.ipopt.max_iter = 6;     %Set maximum iterations - normally 4 iterations are enough
+    options.ipopt.print_level=0;     %No printing of evaluations   
+    options.print_time= 0;           %No printing of time
     solver = nlpsol('solver', 'ipopt', prob, options);
+    
+    
+%Init for warm start X, u =0
+x1_opt=zeros(N_mpc,1);
+x2_opt=zeros(N_mpc,1);
+u_opt=zeros(N_mpc,1);
+w_opt=zeros(2+N_mpc*3,1);
 
+lbg = zeros(2*N_mpc,1);
+ubg = zeros(2*N_mpc,1);
+
+    
+for i = 0:shift:N-1
+    % Extend values for warm starting
+    x1_opt(end+1:end+shift) = x1_opt(end);
+    x2_opt(end+1:end+shift) = x2_opt(end);
+    u_opt(end+1:end+shift)  = u_opt(end);
+ 
+    w0 = [];
+    lbw = [];
+    ubw = [];
+   % J=0;
+    
+    lbw = [lbw; X_applied(:,end)];
+    ubw = [ubw; X_applied(:,end)];
+    w0  = [w0;  X_applied(:,end)];
+        
+    for k=0:N_mpc-1
+        lbw = [lbw; 0];
+        ubw = [ubw; 1];
+        lbw = [lbw; -inf; -inf];
+        ubw = [ubw;  inf;  inf];
+        w0 = [w0; x1_opt(shift+1+k); x2_opt(shift+1+k)];
+    end
+    
+    
+    lbw(1:2) = X_applied(:,end);
+    ubw(1:2) = X_applied(:,end);
+    w0=[X_applied(:,end); w_opt(3:end)];
+    
     % Solve the NLP
-    sol = solver('x0',w0, 'lbx',lbw, 'ubx',ubw, 'lbg',lbg, 'ubg',ubg);
+    sol = solver('x0',w0, 'lbx',lbw, 'ubx',ubw, 'lbg',lbg, 'ubg',ubg,'p',i);
     w_opt = full(sol.x);
     x1_opt=w_opt(1:3:end);
     x2_opt=w_opt(2:3:end);
