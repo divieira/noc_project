@@ -4,15 +4,16 @@ clc
 close all
 import casadi.*
 
-
-% Plot Fonts
-FontSTitle=11;
-FontSAxis=12;
-FontSSGTitle=14;
-FontSLabel=10;
-set(0,'DefaultLineLineWidth',2)
+% Set plot defaults
+set(0,'defaultFigureRenderer','painters');  % For eps exporting
+set(0,'defaultTextFontSize',11);            % title, label
+set(0,'defaultTextFontWeight','bold');      % title, label
+set(0,'defaultAxesFontSize',12);            % axis tick labels
+set(0,'defaultLineLineWidth',2);            % plot lines
+set(0,'defaultFigurePosition',[10 10 800 600]); % figure size
+set(0,'defaultLegendLocation','none');          % manual legend position
+set(0,'defaultLegendPosition',[0.78 0.82 0.1433 0.1560]); % upper right
 figpath = "Figures/";
-if ~isfolder(figpath), mkdir(figpath); end
 
 % Fix random seed to make noise deterministic
 rng default; % Fix RNG for reproducibility
@@ -79,48 +80,27 @@ N_mpc = N; % MPC horizon
 [X_applied, U_applied] = MPC(F, x0, param, sigma, N, N_mpc, shift, ts);
 
 % Plot the solution
-figure('Renderer', 'painters', 'Position', [10 10 800 600])
-subplot(2,1,1)
-hold on
 time = ts*(0:N);
-plot(time, ref(time))
-plot(time, X_applied(1,:), '-')
-plot(time, X_applied(2,:), '--')
-stairs(time, U_applied([1:N N]), '-.','LineWidth',2)
-set(gca,'FontSize',FontSAxis);
-xlabel('t [s]','fontweight','bold','fontsize',FontSLabel)
-legend('x_{ref} [mV]','x1 [mV]','x2 [mV]','u [a.u.]', 'Location', 'none', 'Position', [0.78 0.82 0.1433 0.1560])
-title({"Noise \sigma^2 = " + sigma^2 + "(mV)^2", "MSE = " + num2str((mean((X_applied(1,:)-ref(time)).^2)),'%10.5e\n') + "(mV)^2"},'fontweight','bold','fontsize',FontSTitle)
-axis([0 T -1.6 1.6])
+fig = figure();
+subplot(2,1,1);
+plot_trajectory(time, ref, X_applied, U_applied);
+legend('x_{ref} [mV]','x1 [mV]','x2 [mV]','u [a.u.]');
+title({"Noise \sigma^2 = " + sigma^2 + "(mV)^2", "MSE = " + num2str((mean((X_applied(1,:)-ref(time)).^2)),'%10.5e\n') + "(mV)^2"});
 
 % Run MPC Simulation with noise
 sigma = noiseLevel;    % disturbance on each simulation step
 [X_applied, U_applied] = MPC(F, x0, param, sigma, N, N_mpc, shift, ts);
 
 % Plot the solution
-subplot(2,1,2)
-hold on
-time = ts*(0:N);
-plot(time, ref(time))
-plot(time, X_applied(1,:), '-')
-plot(time, X_applied(2,:), '--')
-stairs(time, U_applied([1:N N]), '-.','LineWidth',2)
-set(gca,'FontSize',FontSAxis);
-xlabel('t [s]','fontweight','bold','fontsize',FontSLabel)
-title({"Noise \sigma^2 = " + sigma^2 + "(mV)^2", "MSE = " + num2str((mean((X_applied(1,:)-ref(time)).^2)),'%10.5e\n')+ "(mV)^2"},'fontweight','bold','fontsize',FontSTitle)
-axis([0 T -1.6 1.6])
+subplot(2,1,2);
+plot_trajectory(time, ref, X_applied, U_applied);
+title({"Noise \sigma^2 = " + sigma^2 + "(mV)^2", "MSE = " + num2str((mean((X_applied(1,:)-ref(time)).^2)),'%10.5e\n')+ "(mV)^2"});
 
-sgtitle('Multiple shooting - Open Loop','fontweight','bold','fontsize',FontSSGTitle)
+sgtitle('Multiple shooting - Open Loop');
 
-set(gcf,'Units','points')
-set(gcf,'PaperUnits','points')
-sizeP = get(gcf,'Position');
+save_figure(fig,figpath,'MultipleShooting');
 
-sizeP = sizeP(3:4);
-set(gcf,'PaperSize',sizeP)
-set(gcf,'PaperPosition',[0,0,sizeP(1),sizeP(2)])
 
-print(gcf,figpath+'MultipleShooting','-depsc','-loose'); % Save figure as .eps file
 %% plot MPC
 for idxShift=1:length(shift_sim)
     %% Multiple shooting and MPC
@@ -139,21 +119,14 @@ for idxShift=1:length(shift_sim)
     [X_applied, U_applied] = MPC(F, x0, param, sigma, N, N_mpc, shift, ts);
 
     % Plot the solution
-    figure('Renderer', 'painters', 'Position', [10 10 800 600])
-    subplot(2,1,1)
-    hold on
     time = ts*(0:N);
-    plot(time, ref(time))
-    plot(time, X_applied(1,:), '-')
-    plot(time, X_applied(2,:), '--')
-    stairs(time, U_applied([1:N N]), '-.','LineWidth',2)
-    set(gca,'FontSize',FontSAxis);
-    xlabel('t [s]','fontweight','bold','fontsize',FontSLabel)
-    legend('x_{ref} [mV]','x1 [mV]','x2 [mV]','u [a.u.]', 'Location', 'none', 'Position', [0.78 0.82 0.1433 0.1560])
+    fig = figure();
+    subplot(2,1,1)
+    plot_trajectory(time, ref, X_applied, U_applied);
+    legend('x_{ref} [mV]','x1 [mV]','x2 [mV]','u [a.u.]');
     str1="Noise \sigma^2 = " + sigma^2 + "(mV)^2";
     str2="MSE = " + num2str((mean((X_applied(1,:)-ref(time)).^2)),'%10.5e\n') + "(mV)^2, Shift = " + num2str(shift) +", Horizon = "+ num2str(N_mpc);
-    title({str1,str2},'fontweight','bold','fontsize',FontSTitle)
-    axis([0 T -1 1])
+    title({str1,str2});
 
     % Run MPC Simulation with noise
     sigma = noiseLevel;    % disturbance on each simulation step
@@ -161,32 +134,14 @@ for idxShift=1:length(shift_sim)
 
     % Plot the solution
     subplot(2,1,2)
-    hold on
-    time = ts*(0:N);
-    plot(time, ref(time))
-    plot(time, X_applied(1,:), '-')
-    plot(time, X_applied(2,:), '--')
-    stairs(time, U_applied([1:N N]), '-.','LineWidth',2)
-    set(gca,'FontSize',FontSAxis);
-    xlabel('t [s]','fontweight','bold','fontsize',FontSLabel)
+    plot_trajectory(time, ref, X_applied, U_applied);
     str1="Noise \sigma^2 =" + sigma^2 + "(mV)^2";
     str2="MSE = " + num2str((mean((X_applied(1,:)-ref(time)).^2)),'%10.5e\n') + "(mV)^2, Shift = " + num2str(shift) +", Horizon = "+ num2str(N_mpc);
-    title({str1,str2},'fontweight','bold','fontsize',FontSTitle)
-    axis([0 T -1 1])
+    title({str1,str2});
 
-    sgtitle('Model Predictive Control - Closed Loop','fontweight','bold','fontsize',FontSSGTitle)
+    sgtitle('Model Predictive Control - Closed Loop')
 
-    set(gcf,'Units','points')
-    set(gcf,'PaperUnits','points')
-    sizeP = get(gcf,'Position');
-
-    sizeP = sizeP(3:4);
-    set(gcf,'PaperSize',sizeP)
-    set(gcf,'PaperPosition',[0,0,sizeP(1),sizeP(2)])
-
-    printstr=figpath+"MPC"+int2str(shift)+"_"+int2str(N_mpc);
-    print(gcf,printstr,'-depsc','-loose'); % Save figure as .eps file
-    
+    save_figure(fig,figpath,"MPC"+int2str(shift)+"_"+int2str(N_mpc));    
 end
     
     %% plot MPC with parameter change
@@ -222,48 +177,28 @@ for idxShift=1:length(shift_sim)
     N_mpc = N_mpc_vec(idxShift); % MPC horizon
     
     % Plot the normalized parameters
-    figure('Renderer', 'painters', 'Position', [10 10 800 600])
-    subplot(2,1,1)
-    hold on
-    for ii=1:4
-        plot(time, param2(:,ii)/param(:,ii))
-    end
-    set(gca,'FontSize',FontSAxis);
-    xlabel('t [s]','fontweight','bold','fontsize',FontSLabel)
-    legend('w/w_0','a/a_0','k_1/k_{1,0}','k_2/k_{2,0}', 'Location', 'none', 'Position', [0.78 0.82 0.1433 0.1560])
-    title({"Normalized Parameters"},'fontweight','bold','fontsize',FontSTitle)
+    fig = figure();
+    subplot(2,1,1);
+    plot(time, [normW normA normK1]);
+    xlabel('t [s]');
+    legend('w/w_0','a/a_0','k_1/k_{1,0}');
+    title({"Normalized Parameters"});
 
     % Simulate MPC without noise and perturbed parameters
     [X_applied, U_applied] = MPC(F, x0, param, sigma, N, N_mpc, shift, ts,param2);
 
     % Plot the solution
-    subplot(2,1,2)
+    subplot(2,1,2);
     hold on
-    time = ts*(0:N);
-    plot(time, ref(time))
-    plot(time, X_applied(1,:), '-')
-    plot(time, X_applied(2,:), '--')
-    stairs(time, U_applied([1:N N]), '-.','LineWidth',2)
-    set(gca,'FontSize',FontSAxis);
-    xlabel('t [s]','fontweight','bold','fontsize',FontSLabel)
+    plot_trajectory(time, ref, X_applied, U_applied);
     str1="Noise \sigma^2 = " + sigma^2 + "(mV)^2";
     str2="MSE = " + num2str((mean((X_applied(1,:)-ref(time)).^2)),'%10.5e\n') + "(mV)^2, Shift = " + num2str(shift) +", Horizon = "+ num2str(N_mpc);
-    title({str1,str2},'fontweight','bold','fontsize',FontSTitle)
-    legend('x_{ref} [mV]','x1 [mV]','x2 [mV]','u [a.u.]', 'Location', 'none', 'Position', [0.78 0.34 0.1433 0.1560])
+    title({str1,str2});
+    legend('x_{ref} [mV]','x1 [mV]','x2 [mV]','u [a.u.]');
 
-    sgtitle('Model Predictive Control with parameter deviations','fontweight','bold','fontsize',FontSSGTitle)
+    sgtitle('Model Predictive Control with parameter deviations');
 
-    set(gcf,'Units','points')
-    set(gcf,'PaperUnits','points')
-    sizeP = get(gcf,'Position');
-
-    sizeP = sizeP(3:4);
-    set(gcf,'PaperSize',sizeP)
-    set(gcf,'PaperPosition',[0,0,sizeP(1),sizeP(2)])
-
-    
-    printstr=figpath+"MPC_ParameterDisturb"+int2str(shift)+"_"+int2str(N_mpc);
-    print(gcf,printstr,'-depsc','-loose'); % Save figure as .eps file
+    save_figure(fig,figpath,"MPC_ParameterDisturb"+int2str(shift)+"_"+int2str(N_mpc));
 end
 
     %% Run MPC Simulation to optimize k
@@ -280,7 +215,7 @@ end
     ref = @(t) a_ref*cos(2*pi*f_ref*t) + a2_ref*heaviside(t-t2_ref).*cos(2*pi*f_ref*t);
 
     alpha = logspace(-4,2,12);
-    figure('Renderer', 'painters', 'Position', [10 10 800 600])
+    fig = figure();
     
 for idxShift=1:length(shift_sim)
     % MPC
@@ -308,31 +243,46 @@ for idxShift=1:length(shift_sim)
     semilogx(alpha,MSE)
     hold on
 end
-    subplot(2,1,1)
-    set(gca,'FontSize',FontSAxis);
-    xlabel('Control cost factor /alpha','fontweight','bold','fontsize',FontSLabel)
-    ylabel('Mean control energy [a.u.^2]','fontweight','bold','fontsize',FontSLabel)
-    title("Shift = " + int2str(shift) +", Horizon = "+int2str(N_mpc))
-    legend
-    subplot(2,1,2)
-    set(gca,'FontSize',FontSAxis);
-    xlabel('Control cost factor /alpha','fontweight','bold','fontsize',FontSLabel)
-    ylabel('MSE [mV^2]','fontweight','bold','fontsize',FontSLabel)
+    subplot(2,1,1);
+    xlabel('Control cost factor /alpha');
+    ylabel('Mean control energy [a.u.^2]');
+    title("Shift = " + int2str(shift) +", Horizon = "+int2str(N_mpc));
+    legend;
+
+    subplot(2,1,2);
+    xlabel('Control cost factor /alpha');
+    ylabel('MSE [mV^2]');
     str1="Noise \sigma^2 = " + sigma^2 + "(mV)^2";
-    title({str1},'fontweight','bold','fontsize',FontSTitle)
+    title({str1});
     
-    sgtitle('MSE vs control cost','fontweight','bold','fontsize',FontSSGTitle)
+    sgtitle('MSE vs control cost');
+
+    save_figure(fig,figpath,"OptimizeK"+int2str(shift)+"_"+int2str(N_mpc));
 
 
-    set(gcf,'Units','points')
-    set(gcf,'PaperUnits','points')
-    sizeP = get(gcf,'Position');
+%% Plot functions
+function plot_trajectory(time, ref, X, U)
+    hold on;
+    plot(time, ref(time));
+    plot(time, X(1,:), '-');
+    plot(time, X(2,:), '--')
+    stairs(time, U([1:end end]), ':','LineWidth',2);
+
+    xlabel('t [s]');
+    ylim([-1.6 1.6]);
+end
+
+function save_figure(fig, figpath, name)
+    set(fig,'Units','points');
+    set(fig,'PaperUnits','points');
+    sizeP = get(fig,'Position');
 
     sizeP = sizeP(3:4);
-    set(gcf,'PaperSize',sizeP)
-    set(gcf,'PaperPosition',[0,0,sizeP(1),sizeP(2)])
-    
-    printstr=figpath+"OptimizeK"+int2str(shift)+"_"+int2str(N_mpc);
-    print(gcf,printstr,'-depsc','-loose'); % Save figure as .eps file
+    set(fig,'PaperSize',sizeP);
+    set(fig,'PaperPosition',[0,0,sizeP(1),sizeP(2)]);
 
+    if ~isfolder(figpath), mkdir(figpath); end
+    filename = fullfile(figpath,name);
 
+    print(fig,filename,'-depsc','-loose'); % Save figure as .eps file
+end
