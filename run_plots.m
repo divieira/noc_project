@@ -16,9 +16,6 @@ set(0,'defaultLegendLocation','none');          % manual legend position
 set(0,'defaultLegendPosition',[0.78 0.82 0.1433 0.1560]); % upper right
 figpath = "Figures/";
 
-% Fix random seed to make noise deterministic
-rng default; % Fix RNG for reproducibility
-
 
 %% Global parameters
 % Simulation
@@ -84,6 +81,7 @@ shift = N;  % MPC interval
 N_mpc = N;  % MPC horizon
 
 % Run simulation with zero and nominal state noise scenarios
+rng default; % Fix RNG for reproducibility
 [X_ms_ideal, U_ms_ideal] = MPC(F, x0, param, 0,     N, N_mpc, shift, ts);
 [X_ms_noise, U_ms_noise] = MPC(F, x0, param, sigma, N, N_mpc, shift, ts);
 mse_ms_ideal = mean((X_ms_ideal(1,:)-ref(time)).^2);
@@ -123,6 +121,7 @@ for c=1:n_config
     N_mpc = N_mpc_values(c); % MPC horizon
 
     % Run simulation with zero and nominal state noise scenarios
+    rng default; % Fix RNG for reproducibility
     [X_mpc_ideal{c}, U_mpc_ideal{c}] = MPC(F, x0, param, 0,     N, N_mpc, shift, ts);
     [X_mpc_noise{c}, U_mpc_noise{c}] = MPC(F, x0, param, sigma, N, N_mpc, shift, ts);
     mse_mpc_ideal(c) = mean((X_mpc_ideal{c}(1,:)-ref(time)).^2);
@@ -180,6 +179,7 @@ for c=1:n_config
     N_mpc = N_mpc_values(c); % MPC horizon
 
     % Run simulation with no noise and perturbed parameters
+    rng default; % Fix RNG for reproducibility
     [X_mpc_perturb{c}, U_mpc_perturb{c}] = MPC(F, x0, param, 0, N, N_mpc, shift, ts, param_sim);
     mse_mpc_perturb(c) = mean((X_mpc_perturb{c}(1,:)-ref(time)).^2);
 end
@@ -229,11 +229,14 @@ for c=1:n_config
     N_mpc = N_mpc_values(c); % MPC horizon
 
     for idx=1:n_alpha
-        % Objective term
-        Lk = (ref(t)-x1)^2 + alpha_values(idx)*u^2;
-        % Formulate discrete time dynamics
-        F = rk4integrator(x, p, u, t, xdot, Lk, 1/fs);
-        [X_applied, U_applied] = MPC(F, x0, param, sigma, N, N_mpc, shift, ts);
+        % Update objective and dynamics with alpha value
+        alpha = alpha_values(idx);
+        L_alpha = (ref(t)-x1)^2 + alpha*u^2;
+        F_alpha = rk4integrator(x, p, u, t, xdot, L_alpha, 1/fs);
+
+        % Run simulation with updated objective function
+        rng default; % Fix RNG for reproducibility
+        [X_applied, U_applied] = MPC(F_alpha, x0, param, sigma, N, N_mpc, shift, ts);
         mce(idx,c) = mean(U_applied.^2);
         mse(idx,c) = mean((X_applied(1,:)-ref(time)).^2);
     end
