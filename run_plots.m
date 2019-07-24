@@ -193,7 +193,7 @@ for c=1:n_config
 
     sgtitle(sprintf('Model Predictive Control (interval: %d, horizon: %d)', shift, N_mpc));
 
-    save_figure(fig,figpath,sprintf("3_Noise_MPC_%d_%d", shift, N_mpc));
+    save_figure(fig,figpath,sprintf("2_Noise_MPC_%d_%d", shift, N_mpc));
 end
 
 %% 2.*) Summary plot: Noise sensitivity
@@ -229,7 +229,7 @@ for c = 1:n_config
 end
 
 legend('Position',LegendPositionNE3);
-save_figure(fig,figpath,"2_NoiseSummary");
+save_figure(fig,figpath,"2_Noise_Summary");
 
 %% 3.a) Model parameter deviations: Multiple shooting
 T = 5;          % s
