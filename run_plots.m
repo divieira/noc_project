@@ -13,7 +13,8 @@ set(0,'defaultLineLineWidth',2);            % normal plot
 set(0,'defaultStairLineWidth',2);           % stairs plot
 set(0,'defaultFigurePosition',[10 10 800 600]); % figure size
 set(0,'defaultLegendLocation','none');          % manual legend position
-set(0,'defaultLegendPosition',[0.78 0.82 0.1433 0.1560]); % upper right
+LegendPositionNE = [0.78 0.82 0.1433 0.1560];   % upper right
+LegendPositionCE = [0.78 0.34 0.1433 0.1560];   % center right
 figpath = "Figures/";
 
 
@@ -90,12 +91,14 @@ end
 % Plot time trajectory
 fig = figure();
 plot_X_trajectory(time, X1, param);
+legend('Position',LegendPositionNE);
 title('Model dynamics');
 save_figure(fig,figpath,'Plant');
 
 % Plot phase plane trajectory
 fig = figure();
 plot_phase_trajectory(X1, X2, param, tau, ode);
+legend('Position',LegendPositionNE);
 title('Model dynamics');
 save_figure(fig,figpath,'PlantPhase');
 
@@ -126,7 +129,7 @@ time = ts*(0:N);
 % Ideal scenario
 subplot(2,1,1);
 plot_trajectory(time, ref, X_ms_ideal, U_ms_ideal);
-legend();
+legend('Position',LegendPositionNE);
 title(sprintf('\\sigma = %g mV/s (MSE: %.2e mV^2)', 0, mse_ms_ideal));
 
 % Noise scenario
@@ -171,7 +174,7 @@ for c=1:n_config
     % Ideal scenario
     subplot(2,1,1)
     plot_trajectory(time, ref, X_mpc_ideal{c}, U_mpc_ideal{c});
-    legend();
+    legend('Position',LegendPositionNE);
     title(sprintf('\\sigma = %g mV/s (MSE: %.2e mV^2)', 0, mse_mpc_ideal(c)));
 
     % Noise scenario
@@ -226,8 +229,9 @@ for c=1:n_config
     fig = figure();
     subplot(2,1,1);
     plot(time, (param_sim./param)');
+    ylim([0 2]);
     xlabel('t [s]');
-    legend('w/w_0','a/a_0','k_1/k_{1,0}');
+    legend('w/w_0','a/a_0','k_1/k_{1,0}', 'Position',LegendPositionNE);
     title({"Normalized Parameters"});
 
     % Plot the solution
@@ -235,9 +239,9 @@ for c=1:n_config
     hold on
     plot_trajectory(time, ref, X_mpc_perturb{c}, U_mpc_perturb{c});
     title(sprintf('\\sigma = %g mV/s (MSE: %.2e mV^2)', 0, mse_mpc_ideal(c)));
-    legend('Position', [0.78 0.34 0.1433 0.1560]);
+    legend('Position', LegendPositionCE);
 
-    sgtitle(sprintf('Model Predictive Control (interval: %d, horizon: %d) with parameter deviations', shift, N_mpc));
+    sgtitle(sprintf('Model Predictive Control (interval: %d, horizon: %d)\nwith parameter deviations', shift, N_mpc));
 
     save_figure(fig,figpath,"MPC_ParameterDisturb"+int2str(shift)+"_"+int2str(N_mpc));
 end
