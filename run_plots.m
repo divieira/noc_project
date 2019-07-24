@@ -68,7 +68,35 @@ L = (ref(t)-x1)^2 + alpha*u^2;      % objective function
 F = rk4integrator(x, p, u, t, xdot, L, 1/fs);
 
 
-%% 1.a) Noise sensitivity: Multiple Shooting
+%% 1) Uncontrolled system
+% Simulation parameters
+T = 2;      % s (simulation period)
+N = T*fs;   % steps
+time = ts*(0:N);
+
+X1 = [0; 0.09]; % initial value for 1st trajectory
+X2 = [0; 0.11]; % initial value for 2nd trajectory
+for k=2:N+1
+    F1k = F('x0',X1(:,k-1), 'p',param, 'u',0, 't',time(k));
+    F2k = F('x0',X2(:,k-1), 'p',param, 'u',0, 't',time(k));
+    X1(:,k) = full(F1k.xf);
+    X2(:,k) = full(F2k.xf);
+end
+
+% Plot time trajectory
+fig = figure();
+plot_X_trajectory(time, X1, param);
+title('Model dynamics');
+save_figure(fig,figpath,'Plant');
+
+% Plot phase plane trajectory
+fig = figure();
+plot_phase_trajectory(X1, X2, param, tau, @ode);
+title('Model dynamics');
+save_figure(fig,figpath,'PlantPhase');
+
+
+%% 2.a) Noise sensitivity: Multiple Shooting
 % Simulation parameters
 T = 2;      % s (simulation period)
 N = T*fs;   % steps
@@ -106,7 +134,7 @@ sgtitle('Direct multiple shooting (open loop)');
 save_figure(fig,figpath,'MultipleShooting');
 
 
-%% 1.b) Noise sensitivity: MPC (different configurations)
+%% 2.b) Noise sensitivity: MPC (different configurations)
 % Run simulation for each MPC configuration
 n_config = length(shift_values);
 X_mpc_ideal = cell(n_config,1);
@@ -153,7 +181,7 @@ for c=1:n_config
 end
 
 
-%% 2.a) Model parameter deviations (MPC)
+%% 3) Model parameter deviations (MPC)
 T = 5;          % s
 N = T*fs;       % steps
 time = ts*(0:N);
@@ -211,7 +239,7 @@ for c=1:n_config
 end
 
 
-%% 3) Control cost factor (MPC)
+%% 4) Control cost factor (MPC)
 T = 2;          % s
 N = T*fs;       % steps
 time = ts*(0:N);
@@ -268,15 +296,68 @@ save_figure(fig,figpath,"OptimizeK"+int2str(shift)+"_"+int2str(N_mpc));
 
 %% Plot functions
 function plot_trajectory(time, ref, X, U)
-    % Plot reference, state variables and applied control
+    % Plot reference, state variables and applied control (if present)
     hold on;
     plot(time, ref(time),   'DisplayName','ref [mV]');
     plot(time, X(1,:), '-', 'DisplayName','x_1 [mV]');
     plot(time, X(2,:), '--','DisplayName','x_2 [mV]');
-    stairs(time, U([1:end end]), ':', 'DisplayName','u [a.u.]');
+    if ~isempty(U)
+        stairs(time, U([1:end end]), ':', 'DisplayName','u [a.u.]');
+    end
 
     xlabel('t [s]');
     ylim([-1.5 1.5]);
+end
+
+function plot_X_trajectory(time, X, param)
+    % Plot only state variables and limit cycle
+    hold on;
+    plot(time, X(1,:), '-', 'DisplayName','x_1');
+    plot(time, X(2,:), '--','DisplayName','x_2');
+    plot(time, ones(size(time))*sqrt(param(2)),'k--','DisplayName','Limit cycle');
+    plot(time,-ones(size(time))*sqrt(param(2)),'k--','HandleVisibility','off');
+
+    xlabel('t [s]');
+    ylabel('x [mV]');
+    ylim([-0.11 0.11]);
+end
+
+function plot_phase_trajectory(X1, X2, param, tau, ode)
+    hold on;
+
+    %plot first line
+    plot(X1(1,:), X1(2,:),'c-','HandleVisibility','off');
+    plot(X1(1,1),X1(2,1),'r*')
+    plot(X1(1,end),X1(2,end),'bo')
+
+    %plot limit cycle
+    th = 0:pi/50:2*pi;
+    xunit = sqrt(param(2)) * cos(th);
+    yunit = sqrt(param(2)) * sin(th);
+    plot(xunit, yunit, 'k--');
+
+    %plot second line
+    plot(X2(1,:), X2(2,:),'m-')
+    plot(X2(1,1),X2(2,1),'r*')
+    plot(X2(1,end),X2(2,end),'bo')
+
+    %plot vector field
+    [xx,yy] = meshgrid(-0.12:0.02:0.12,-0.12:0.02:0.12);
+    u=zeros(size(xx));
+    for ii=1:size(xx,1)
+        for jj=1:size(xx,2)
+            out = ode([xx(ii,jj),yy(ii,jj)],0,[tau,param]);
+            u(ii,jj)=out(1);
+            v(ii,jj)=out(2);
+        end
+    end
+    quiver(xx,yy,10*u,10*v,'LineWidth',0.8,'MaxHeadSize', 0.4)
+    axis(0.12*[-1 1 -1 1]);
+    
+    xlabel('x_1 [mV]');
+    ylabel('x_2 [mV]');
+    title('State space')
+    legend('Start Point', 'End Point', 'Limit cycle')
 end
 
 function save_figure(fig, figpath, name)
