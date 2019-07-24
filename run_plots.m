@@ -1,6 +1,6 @@
-%Plots control energy - MSE
-clear
-clc
+% Plots control energy - MSE
+
+clear variables
 close all
 import casadi.*
 
@@ -9,7 +9,8 @@ set(0,'defaultFigureRenderer','painters');  % For eps exporting
 set(0,'defaultTextFontSize',11);            % title, label
 set(0,'defaultTextFontWeight','bold');      % title, label
 set(0,'defaultAxesFontSize',12);            % axis tick labels
-set(0,'defaultLineLineWidth',2);            % plot lines
+set(0,'defaultLineLineWidth',2);            % normal plot
+set(0,'defaultStairLineWidth',2);           % stairs plot
 set(0,'defaultFigurePosition',[10 10 800 600]); % figure size
 set(0,'defaultLegendLocation','none');          % manual legend position
 set(0,'defaultLegendPosition',[0.78 0.82 0.1433 0.1560]); % upper right
@@ -18,261 +19,261 @@ figpath = "Figures/";
 % Fix random seed to make noise deterministic
 rng default; % Fix RNG for reproducibility
 
-%% Parameters
-%many are redifined in the simulations to get a specific behavior or speed
-%Mainly relevant to multiple shooting and MPC
+
+%% Global parameters
 % Simulation
-fs = 160;       % Hz
-T = 2.5;        % s
-N = T*fs;       % steps
-ts = 1/fs;      % s
-x0 = [.5; 0];    % initial conditions
+fs = 160;       % Hz (sampling frequency)
+ts = 1/fs;      % s (time step)
+x0 = [.5; 0];   % mV (initial conditions)
 
-%parameters for independent runs - MPC
-shift_sim=[1 5 10];
-N_mpc_vec=[20 20 20];
+% Model parameters (nominal values)
+param = [2*pi*6; .01; -1e2; 0]; % [w; a; k1; k2]
+tau = 0.1;                      % s (stiffness constant)
+sigma = 10;                     % mV/s (for state noise simulations)
 
-% Model for optimization
-param = [2*pi*6 .01 -1e2 0]; % [w, a, k1, k2]
-tau = 0.1;      % s (arbitrary stiffness constant)
+% Reference (for multiple shooting and MPC)
+f_ref = 8;      % Hz (reference sine frequency)
+a_ref = .5;     % mV (reference sine amplitude)
 
-% Reference for multiple shooting and MPC
-f_ref = 8;      % Hz
-a_ref = .5;     % mV
-t2_ref = 2.5;   % s
-a2_ref = 0;     % mV
-ref = @(t) a_ref*cos(2*pi*f_ref*t) + a2_ref*heaviside(t-t2_ref).*cos(2*pi*f_ref*t);
+% Control cost (for multiple shooting and MPC)
+alpha = .01;    % control cost factor
+
+% MPC parameters (different configurations)
+shift_values = [ 1, 10];    % timesteps (MPC interval)
+N_mpc_values = [20, 20];    % timesteps (MPC horizon)
 
 
 %% Model definition
 % Declare model variables
-x1=SX.sym('x1');
-x2=SX.sym('x2');
-w=SX.sym('w');
-a=SX.sym('a');
-k_1=SX.sym('k1');
-k_2=SX.sym('k2');
+x1 = SX.sym('x1');
+x2 = SX.sym('x2');
+w  = SX.sym('w');
+a  = SX.sym('a');
+k1 = SX.sym('k1');
+k2 = SX.sym('k2');
 
 x = [x1; x2];
-p = [w, a, k_1, k_2]';
+p = [w; a; k1; k2];
 u = SX.sym('u');
 
 % Model equations
-xdot = ode(x,u,[tau,w,a,k_1,k_2]);
+xdot = ode(x,u,[tau,w,a,k1,k2]);
 t = SX.sym('t');
 
-%% Multiple shooting
+
+%% Optimal control problem
 % Objective
-alpha = .01;     % control cost
-L = (ref(t)-x1)^2 + alpha*u^2;
-% Formulate discrete time dynamics
+ref = @(t) a_ref*cos(2*pi*f_ref*t); % reference (defined as a function)
+L = (ref(t)-x1)^2 + alpha*u^2;      % objective function
+
+% Formulate discrete time dynamics for state and objective functions using
+% a single-step Runge-Kutta 4th order method integrator at each timestep
 F = rk4integrator(x, p, u, t, xdot, L, 1/fs);
 
 
-noiseLevel=10;
-%% plot Multiple Shooting
-%parameters
-sigma = 0.0;    % disturbance on each simulation step
-% MPC
-shift = N;  % MPC interval
-N_mpc = N; % MPC horizon
-
-[X_applied, U_applied] = MPC(F, x0, param, sigma, N, N_mpc, shift, ts);
-
-% Plot the solution
+%% 1.a) Noise sensitivity: Multiple Shooting
+% Simulation parameters
+T = 2;      % s (simulation period)
+N = T*fs;   % steps
 time = ts*(0:N);
+
+% Simulate the direct multiple shooting solution by passing "N" as the MPC
+% interval and horizon parameters, effectively performing a single control
+% evaluation over the entire simulation period
+shift = N;  % MPC interval
+N_mpc = N;  % MPC horizon
+
+% Run simulation with zero and nominal state noise scenarios
+[X_ms_ideal, U_ms_ideal] = MPC(F, x0, param, 0,     N, N_mpc, shift, ts);
+[X_ms_noise, U_ms_noise] = MPC(F, x0, param, sigma, N, N_mpc, shift, ts);
+mse_ms_ideal = mean((X_ms_ideal(1,:)-ref(time)).^2);
+mse_ms_noise = mean((X_ms_noise(1,:)-ref(time)).^2);
+
+% Plot solutions for both scenarios
 fig = figure();
+time = ts*(0:N);
+
+% Ideal scenario
 subplot(2,1,1);
-plot_trajectory(time, ref, X_applied, U_applied);
-legend('x_{ref} [mV]','x1 [mV]','x2 [mV]','u [a.u.]');
-title({"Noise \sigma^2 = " + sigma^2 + "(mV)^2", "MSE = " + num2str((mean((X_applied(1,:)-ref(time)).^2)),'%10.5e\n') + "(mV)^2"});
+plot_trajectory(time, ref, X_ms_ideal, U_ms_ideal);
+legend();
+title(sprintf('\\sigma = %g mV/s (MSE: %.2e mV^2)', 0, mse_ms_ideal));
 
-% Run MPC Simulation with noise
-sigma = noiseLevel;    % disturbance on each simulation step
-[X_applied, U_applied] = MPC(F, x0, param, sigma, N, N_mpc, shift, ts);
-
-% Plot the solution
+% Noise scenario
 subplot(2,1,2);
-plot_trajectory(time, ref, X_applied, U_applied);
-title({"Noise \sigma^2 = " + sigma^2 + "(mV)^2", "MSE = " + num2str((mean((X_applied(1,:)-ref(time)).^2)),'%10.5e\n')+ "(mV)^2"});
+plot_trajectory(time, ref, X_ms_noise, U_ms_noise);
+title(sprintf('\\sigma = %g mV/s (MSE: %.2e mV^2)', sigma, mse_ms_noise));
 
-sgtitle('Multiple shooting - Open Loop');
-
+sgtitle('Direct multiple shooting (open loop)');
 save_figure(fig,figpath,'MultipleShooting');
 
 
-%% plot MPC
-for idxShift=1:length(shift_sim)
-    %% Multiple shooting and MPC
-    %shorter TimeFrame to obtain better visualization
-    T = 1.5;          % s
-    N = T*fs;       % steps
+%% 1.b) Noise sensitivity: MPC (different configurations)
+% Run simulation for each MPC configuration
+n_config = length(shift_values);
+X_mpc_ideal = cell(n_config,1);
+U_mpc_ideal = cell(n_config,1);
+X_mpc_noise = cell(n_config,1);
+U_mpc_noise = cell(n_config,1);
+mse_mpc_ideal = zeros(n_config,1);
+mse_mpc_noise = zeros(n_config,1);
+for c=1:n_config
+    % Set MPC configuration
+    shift = shift_values(c); % MPC interval
+    N_mpc = N_mpc_values(c); % MPC horizon
 
-    % Formulate discrete time dynamics
-    F = rk4integrator(x, p, u, t, xdot, L, 1/fs);
-    
-    sigma = 0.0;    % disturbance on each simulation step
-    % MPC
-    shift = shift_sim(idxShift);  % MPC interval
-    N_mpc = N_mpc_vec(idxShift); % MPC horizon
+    % Run simulation with zero and nominal state noise scenarios
+    [X_mpc_ideal{c}, U_mpc_ideal{c}] = MPC(F, x0, param, 0,     N, N_mpc, shift, ts);
+    [X_mpc_noise{c}, U_mpc_noise{c}] = MPC(F, x0, param, sigma, N, N_mpc, shift, ts);
+    mse_mpc_ideal(c) = mean((X_mpc_ideal{c}(1,:)-ref(time)).^2);
+    mse_mpc_noise(c) = mean((X_mpc_noise{c}(1,:)-ref(time)).^2);
+end
 
-    [X_applied, U_applied] = MPC(F, x0, param, sigma, N, N_mpc, shift, ts);
+% Plot solutions
+for c=1:n_config
+    % Get MPC configuration
+    shift = shift_values(c); % MPC interval
+    N_mpc = N_mpc_values(c); % MPC horizon
 
-    % Plot the solution
-    time = ts*(0:N);
     fig = figure();
+
+    % Ideal scenario
     subplot(2,1,1)
-    plot_trajectory(time, ref, X_applied, U_applied);
-    legend('x_{ref} [mV]','x1 [mV]','x2 [mV]','u [a.u.]');
-    str1="Noise \sigma^2 = " + sigma^2 + "(mV)^2";
-    str2="MSE = " + num2str((mean((X_applied(1,:)-ref(time)).^2)),'%10.5e\n') + "(mV)^2, Shift = " + num2str(shift) +", Horizon = "+ num2str(N_mpc);
-    title({str1,str2});
+    plot_trajectory(time, ref, X_mpc_ideal{c}, U_mpc_ideal{c});
+    legend();
+    title(sprintf('\\sigma = %g mV/s (MSE: %.2e mV^2)', 0, mse_mpc_ideal(c)));
 
-    % Run MPC Simulation with noise
-    sigma = noiseLevel;    % disturbance on each simulation step
-    [X_applied, U_applied] = MPC(F, x0, param, sigma, N, N_mpc, shift, ts);
-
-    % Plot the solution
+    % Noise scenario
     subplot(2,1,2)
-    plot_trajectory(time, ref, X_applied, U_applied);
-    str1="Noise \sigma^2 =" + sigma^2 + "(mV)^2";
-    str2="MSE = " + num2str((mean((X_applied(1,:)-ref(time)).^2)),'%10.5e\n') + "(mV)^2, Shift = " + num2str(shift) +", Horizon = "+ num2str(N_mpc);
-    title({str1,str2});
+    plot_trajectory(time, ref, X_mpc_noise{c}, U_mpc_noise{c});
+    title(sprintf('\\sigma = %g mV/s (MSE: %.2e mV^2)', sigma, mse_mpc_noise(c)));
 
-    sgtitle('Model Predictive Control - Closed Loop')
+    sgtitle(sprintf('Model Predictive Control (interval: %d, horizon: %d)', shift, N_mpc));
 
     save_figure(fig,figpath,"MPC"+int2str(shift)+"_"+int2str(N_mpc));    
 end
-    
-    %% plot MPC with parameter change
-    %parameters
-    T = 5;          % s
-    N = T*fs;       % steps
-
-    %parameters
-    sigma = 0.0;    % disturbance on each simulation step
-    % MPC run if normal MPC was not executet before.
-    %shift = 1;  % MPC interval
-    %N_mpc = 10; % MPC horizon
 
 
-    % Reference
-    f_ref = 8;      % Hz
-    a_ref = .5;     % mV
-    t2_ref = 2.5;   % s
-    a2_ref = .0;    % mV
-    ref = @(t) a_ref*cos(2*pi*f_ref*t) + a2_ref*heaviside(t-t2_ref).*cos(2*pi*f_ref*t);
+%% 2.a) Model parameter deviations (MPC)
+T = 5;          % s
+N = T*fs;       % steps
+time = ts*(0:N);
 
-    time = ts*(0:N);
+% Create vector with values 2 in [ta,tb), .5 in [tc,tc), 1 otherwise
+perturbation = @(ta,tb,tc,time) 1 + rectangularPulse(ta,tb,time) - 0.5*rectangularPulse(tb,tc,time);
 
-    %Parameter pertubation
-    normW=(1+1*heaviside(time-0.5)-1.5*heaviside(time-1.0)+0.5*heaviside(time-1.5))';
-    normA=(1+1*heaviside(time-2)-1.5*heaviside(time-2.5)+0.5*heaviside(time-3.0))';
-    normK1=(1+1*heaviside(time-3.5)-1.5*heaviside(time-4.0)+0.5*heaviside(time-4.5))';
-    normOnes=ones(size(time,2),1);
-    param2=[normW*param(1),normA*param(2),normK1*param(3),normOnes*param(4)];
-for idxShift=1:length(shift_sim)
-     % MPC
-    shift = shift_sim(idxShift);  % MPC interval
-    N_mpc = N_mpc_vec(idxShift); % MPC horizon
+% Parameter vector for simulation (perturbation on nominal values)
+w_perturb  = param(1)*perturbation(0.5, 1.0, 1.5, time);
+a_perturb  = param(2)*perturbation(2.0, 2.5, 3.0, time);
+k1_perturb = param(3)*perturbation(3.5, 4.0, 4.5, time);
+k2_perturb = param(4)*ones(1,N+1); %unperturbed
+param_sim = [w_perturb; a_perturb; k1_perturb; k2_perturb];
+
+% Run simulation for each MPC configuration
+n_config = length(shift_values);
+X_mpc_perturb = cell(n_config,1);
+U_mpc_perturb = cell(n_config,1);
+mse_mpc_perturb = zeros(n_config,1);
+for c=1:n_config
+    % Set MPC configuration
+    shift = shift_values(c); % MPC interval
+    N_mpc = N_mpc_values(c); % MPC horizon
+
+    % Run simulation with no noise and perturbed parameters
+    [X_mpc_perturb{c}, U_mpc_perturb{c}] = MPC(F, x0, param, 0, N, N_mpc, shift, ts, param_sim);
+    mse_mpc_perturb(c) = mean((X_mpc_perturb{c}(1,:)-ref(time)).^2);
+end
+
+% Plot solutions
+for c=1:n_config
+    % Get MPC configuration
+    shift = shift_values(c); % MPC interval
+    N_mpc = N_mpc_values(c); % MPC horizon
     
     % Plot the normalized parameters
     fig = figure();
     subplot(2,1,1);
-    plot(time, [normW normA normK1]);
+    plot(time, (param_sim./param)');
     xlabel('t [s]');
     legend('w/w_0','a/a_0','k_1/k_{1,0}');
     title({"Normalized Parameters"});
 
-    % Simulate MPC without noise and perturbed parameters
-    [X_applied, U_applied] = MPC(F, x0, param, sigma, N, N_mpc, shift, ts,param2);
-
     % Plot the solution
     subplot(2,1,2);
     hold on
-    plot_trajectory(time, ref, X_applied, U_applied);
-    str1="Noise \sigma^2 = " + sigma^2 + "(mV)^2";
-    str2="MSE = " + num2str((mean((X_applied(1,:)-ref(time)).^2)),'%10.5e\n') + "(mV)^2, Shift = " + num2str(shift) +", Horizon = "+ num2str(N_mpc);
-    title({str1,str2});
-    legend('x_{ref} [mV]','x1 [mV]','x2 [mV]','u [a.u.]');
+    plot_trajectory(time, ref, X_mpc_perturb{c}, U_mpc_perturb{c});
+    title(sprintf('\\sigma = %g mV/s (MSE: %.2e mV^2)', 0, mse_mpc_ideal(c)));
+    legend('Position', [0.78 0.34 0.1433 0.1560]);
 
-    sgtitle('Model Predictive Control with parameter deviations');
+    sgtitle(sprintf('Model Predictive Control (interval: %d, horizon: %d) with parameter deviations', shift, N_mpc));
 
     save_figure(fig,figpath,"MPC_ParameterDisturb"+int2str(shift)+"_"+int2str(N_mpc));
 end
 
-    %% Run MPC Simulation to optimize k
-    T = 5;          % s
-    N = T*fs;       % steps
-    
-    sigma = 10;    % disturbance on each simulation step
 
-    % Reference
-    f_ref = 8;      % Hz
-    a_ref = .5;     % mV
-    t2_ref = 2.5;   % s
-    a2_ref = .0;    % mV
-    ref = @(t) a_ref*cos(2*pi*f_ref*t) + a2_ref*heaviside(t-t2_ref).*cos(2*pi*f_ref*t);
+%% 3) Control cost factor (MPC)
+T = 2;          % s
+N = T*fs;       % steps
+time = ts*(0:N);
 
-    alpha = logspace(-4,2,12);
-    fig = figure();
-    
-for idxShift=1:length(shift_sim)
-    % MPC
-    shift = shift_sim(idxShift);  % MPC interval
-    N_mpc = N_mpc_vec(idxShift); % MPC horizon
-    MSE=zeros(size(alpha,2),1);
-    MeanControlEnergy=zeros(size(alpha,2),1);
-    time = ts*(0:N);
-    for jj=1:size(alpha,2)
+% Control cost values to evaluate
+alpha_values = logspace(-4,2,12);
+n_alpha = length(alpha_values);
+
+% Run simulation for each MPC configuration
+mse = zeros(n_alpha,n_config); % mean squared error to reference
+mce = zeros(n_alpha,n_config); % mean control energy
+for c=1:n_config
+    % Set MPC configuration
+    shift = shift_values(c); % MPC interval
+    N_mpc = N_mpc_values(c); % MPC horizon
+
+    for idx=1:n_alpha
         % Objective term
-        Lk = (ref(t)-x1)^2 + alpha(jj)*u^2;
+        Lk = (ref(t)-x1)^2 + alpha_values(idx)*u^2;
         % Formulate discrete time dynamics
         F = rk4integrator(x, p, u, t, xdot, Lk, 1/fs);
         [X_applied, U_applied] = MPC(F, x0, param, sigma, N, N_mpc, shift, ts);
-        MeanControlEnergy(jj)=mean(U_applied.^2);
-        MSE(jj)=mean((X_applied(1,:)-ref(time)).^2);
+        mce(idx,c) = mean(U_applied.^2);
+        mse(idx,c) = mean((X_applied(1,:)-ref(time)).^2);
     end
-
-    % Plot the results  
-    subplot(2,1,1)
-    legendEntry="Shift: " + num2str(shift);
-    semilogx(alpha,MeanControlEnergy,'DisplayName', legendEntry)
-    hold on;
-    subplot(2,1,2)
-    semilogx(alpha,MSE)
-    hold on
 end
-    subplot(2,1,1);
-    xlabel('Control cost factor /alpha');
-    ylabel('Mean control energy [a.u.^2]');
-    title("Shift = " + int2str(shift) +", Horizon = "+int2str(N_mpc));
-    legend;
 
-    subplot(2,1,2);
-    xlabel('Control cost factor /alpha');
-    ylabel('MSE [mV^2]');
-    str1="Noise \sigma^2 = " + sigma^2 + "(mV)^2";
-    title({str1});
-    
-    sgtitle('MSE vs control cost');
+% Plot the results
+fig = figure();
+subplot(2,1,1);
+loglog(alpha_values,mce)
+xlabel('Control cost factor /alpha');
+ylabel('Mean control energy [a.u.^2]');
+title("Shift = " + int2str(shift) +", Horizon = "+int2str(N_mpc));
+legend(arrayfun(@(shift) {"Shift: " + num2str(shift)}, shift_values));
 
-    save_figure(fig,figpath,"OptimizeK"+int2str(shift)+"_"+int2str(N_mpc));
+subplot(2,1,2);
+loglog(alpha_values,mse)
+xlabel('Control cost factor /alpha');
+ylabel('MSE [mV^2]');
+title(sprintf('\\sigma: %g mV/s', sigma));
+
+sgtitle('Control cost balance factor');
+
+save_figure(fig,figpath,"OptimizeK"+int2str(shift)+"_"+int2str(N_mpc));
 
 
 %% Plot functions
 function plot_trajectory(time, ref, X, U)
+    % Plot reference, state variables and applied control
     hold on;
-    plot(time, ref(time));
-    plot(time, X(1,:), '-');
-    plot(time, X(2,:), '--')
-    stairs(time, U([1:end end]), ':','LineWidth',2);
+    plot(time, ref(time),   'DisplayName','ref [mV]');
+    plot(time, X(1,:), '-', 'DisplayName','x_1 [mV]');
+    plot(time, X(2,:), '--','DisplayName','x_2 [mV]');
+    stairs(time, U([1:end end]), ':', 'DisplayName','u [a.u.]');
 
     xlabel('t [s]');
-    ylim([-1.6 1.6]);
+    ylim([-1.5 1.5]);
 end
 
 function save_figure(fig, figpath, name)
+    % Save figure as .eps
     set(fig,'Units','points');
     set(fig,'PaperUnits','points');
     sizeP = get(fig,'Position');
