@@ -271,7 +271,7 @@ title({"Normalized Parameters"});
 subplot(2,1,2);
 hold on
 plot_trajectory(time, ref, X_ms_perturb, U_ms_perturb);
-title(sprintf('Direct multiple shooting (MSE: %.2e mV^2)', 0, mse_ms_perturb));
+title(sprintf('Direct multiple shooting (MSE: %.2e mV^2)', mse_ms_perturb));
 legend('Position', LegendPositionCE);
 
 sgtitle('Direct multiple shooting with parameter deviations');
@@ -314,7 +314,7 @@ for c=1:n_config
     subplot(2,1,2);
     hold on
     plot_trajectory(time, ref, X_mpc_perturb{c}, U_mpc_perturb{c});
-    title(sprintf('MPC (MSE: %.2e mV^2)', 0, mse_mpc_perturb(c)));
+    title(sprintf('MPC (MSE: %.2e mV^2)', mse_mpc_perturb(c)));
     legend('Position', LegendPositionCE);
 
     sgtitle(sprintf('Model Predictive Control (interval: %d, horizon: %d)\nwith parameter deviations', shift, N_mpc));
