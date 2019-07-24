@@ -12,9 +12,14 @@ set(0,'defaultAxesFontSize',12);            % axis tick labels
 set(0,'defaultLineLineWidth',2);            % normal plot
 set(0,'defaultStairLineWidth',2);           % stairs plot
 set(0,'defaultFigurePosition',[10 10 800 600]); % figure size
-set(0,'defaultLegendLocation','none');          % manual legend position
-LegendPositionNE = [0.78 0.82 0.1433 0.1560];   % upper right
-LegendPositionCE = [0.78 0.34 0.1433 0.1560];   % center right
+set(0,'defaultLegendLocation','none');      % manual legend position
+LegendPositionNE  = [0.78 0.82 0.14 0.15];  % upper  right
+LegendPositionCE  = [0.78 0.34 0.14 0.15];  % center right
+LegendPositionNC2 = [0.42 0.86 0.06 0.11];  % upper  center (1x2 plots)
+LegendPositionNE2 = [0.86 0.86 0.06 0.11];  % upper  right  (1x2 plots)
+LegendPositionNE3 = [0.90 0.84 0.06 0.11];  % upper  right  (1x3 plots)
+LegendPositionNE4 = [0.84 0.84 0.08 0.06];  % upper  right  (4x1 plots)
+LegendPositionCE4 = [0.84 0.64 0.08 0.06];  % center right  (4x1 plots)
 figpath = "Figures/";
 
 
@@ -37,7 +42,7 @@ a_ref = .5;     % mV (reference sine amplitude)
 alpha = .01;    % control cost factor
 
 % MPC parameters (different configurations)
-shift_values = [ 1, 10];    % timesteps (MPC interval)
+shift_values = [ 1,  5];    % timesteps (MPC interval)
 N_mpc_values = [20, 20];    % timesteps (MPC horizon)
 
 
@@ -75,7 +80,7 @@ F = rk4integrator(x, p, u, t, xdot, L, 1/fs);
 
 %% 1) Uncontrolled system
 % Simulation parameters
-T = 2;      % s (simulation period)
+T = 1;      % s (simulation period)
 N = T*fs;   % steps
 time = ts*(0:N);
 
@@ -88,24 +93,28 @@ for k=2:N+1
     X2(:,k) = full(F2k.xf);
 end
 
-% Plot time trajectory
+% Plot trajectories in single figure
 fig = figure();
+fig.Position(3) = 2*fig.Position(3); % resize width
+
+% Plot time trajectory
+subplot(1,2,1);
 plot_X_trajectory(time, X1, param);
-legend('Position',LegendPositionNE);
-title('Model dynamics');
-save_figure(fig,figpath,'Plant');
+legend('Position',LegendPositionNC2);
+title('Time trajectory');
 
 % Plot phase plane trajectory
-fig = figure();
+subplot(1,2,2);
 plot_phase_trajectory(X1, X2, param, tau, ode);
-legend('Position',LegendPositionNE);
-title('Model dynamics');
-save_figure(fig,figpath,'PlantPhase');
+legend('Position',LegendPositionNE2);
+title('Phase trajectory');
+
+save_figure(fig,figpath,'1_Model');
 
 
 %% 2.a) Noise sensitivity: Multiple Shooting
 % Simulation parameters
-T = 2;      % s (simulation period)
+T = 1;      % s (simulation period)
 N = T*fs;   % steps
 time = ts*(0:N);
 
@@ -138,7 +147,7 @@ plot_trajectory(time, ref, X_ms_noise, U_ms_noise);
 title(sprintf('\\sigma = %g mV/s (MSE: %.2e mV^2)', sigma, mse_ms_noise));
 
 sgtitle('Direct multiple shooting (open loop)');
-save_figure(fig,figpath,'MultipleShooting');
+save_figure(fig,figpath,'2_Noise_MS');
 
 
 %% 2.b) Noise sensitivity: MPC (different configurations)
@@ -184,11 +193,45 @@ for c=1:n_config
 
     sgtitle(sprintf('Model Predictive Control (interval: %d, horizon: %d)', shift, N_mpc));
 
-    save_figure(fig,figpath,"MPC"+int2str(shift)+"_"+int2str(N_mpc));    
+    save_figure(fig,figpath,sprintf("3_Noise_MPC_%d_%d", shift, N_mpc));
 end
 
+%% 2.*) Summary plot: Noise sensitivity
+fig = figure();
+fig.Position(3) = 1.5*fig.Position(3); % resize width
 
-%% 3) Model parameter deviations (MPC)
+% Multiple shooting
+% Ideal scenario
+subplot(2,3,1);
+plot_trajectory(time, ref, X_ms_ideal, U_ms_ideal);
+title(sprintf('Direct multiple shooting (open loop)\n\\sigma = %g mV/s (MSE: %.2e mV^2)', 0, mse_ms_ideal));
+
+% Noise scenario
+subplot(2,3,4);
+plot_trajectory(time, ref, X_ms_noise, U_ms_noise);
+title(sprintf('\\sigma = %g mV/s (MSE: %.2e mV^2)', sigma, mse_ms_noise));
+
+% MPC
+for c = 1:n_config
+    % Get MPC configuration
+    shift = shift_values(c); % MPC interval
+    N_mpc = N_mpc_values(c); % MPC horizon
+
+    % Ideal scenario
+    subplot(2,3,1+c)
+    plot_trajectory(time, ref, X_mpc_ideal{c}, U_mpc_ideal{c});
+    title(sprintf('Model Predictive Control (interval: %d, horizon: %d)\n\\sigma = %g mV/s (MSE: %.2e mV^2)', shift, N_mpc, 0, mse_mpc_ideal(c)));
+
+    % Noise scenario
+    subplot(2,3,4+c)
+    plot_trajectory(time, ref, X_mpc_noise{c}, U_mpc_noise{c});
+    title(sprintf('\\sigma = %g mV/s (MSE: %.2e mV^2)', sigma, mse_mpc_noise(c)));
+end
+
+legend('Position',LegendPositionNE3);
+save_figure(fig,figpath,"2_NoiseSummary");
+
+%% 3.a) Model parameter deviations: Multiple shooting
 T = 5;          % s
 N = T*fs;       % steps
 time = ts*(0:N);
@@ -203,6 +246,39 @@ k1_perturb = param(3)*perturbation(3.5, 4.0, 4.5, time);
 k2_perturb = param(4)*ones(1,N+1); %unperturbed
 param_sim = [w_perturb; a_perturb; k1_perturb; k2_perturb];
 
+% Simulate the direct multiple shooting solution by passing "N" as the MPC
+% interval and horizon parameters, effectively performing a single control
+% evaluation over the entire simulation period
+shift = N;  % MPC interval
+N_mpc = N;  % MPC horizon
+
+% Run simulation with no noise and perturbed parameters
+rng default; % Fix RNG for reproducibility
+[X_ms_perturb, U_ms_perturb] = MPC(F, x0, param, 0, N, N_mpc, shift, ts, param_sim);
+mse_ms_perturb = mean((X_ms_perturb(1,:)-ref(time)).^2);
+
+% Plot solutions
+% Plot the normalized parameters
+fig = figure();
+subplot(2,1,1);
+plot(time, (param_sim./param)');
+ylim([0 2]);
+xlabel('t [s]');
+legend('w/w_0','a/a_0','k_1/k_{1,0}', 'Position',LegendPositionNE);
+title({"Normalized Parameters"});
+
+% Plot the solution
+subplot(2,1,2);
+hold on
+plot_trajectory(time, ref, X_ms_perturb, U_ms_perturb);
+title(sprintf('Direct multiple shooting (MSE: %.2e mV^2)', 0, mse_ms_perturb));
+legend('Position', LegendPositionCE);
+
+sgtitle('Direct multiple shooting with parameter deviations');
+save_figure(fig,figpath,"3_Perturb_MS");
+
+
+%% 3.b) Model parameter deviations: MPC
 % Run simulation for each MPC configuration
 n_config = length(shift_values);
 X_mpc_perturb = cell(n_config,1);
@@ -224,31 +300,66 @@ for c=1:n_config
     % Get MPC configuration
     shift = shift_values(c); % MPC interval
     N_mpc = N_mpc_values(c); % MPC horizon
-    
+
     % Plot the normalized parameters
     fig = figure();
     subplot(2,1,1);
     plot(time, (param_sim./param)');
     ylim([0 2]);
     xlabel('t [s]');
-    legend('w/w_0','a/a_0','k_1/k_{1,0}', 'Position',LegendPositionNE);
+    legend('\omega/\omega_0','a/a_0','k_1/k_{1,0}', 'Position',LegendPositionNE);
     title({"Normalized Parameters"});
 
     % Plot the solution
     subplot(2,1,2);
     hold on
     plot_trajectory(time, ref, X_mpc_perturb{c}, U_mpc_perturb{c});
-    title(sprintf('\\sigma = %g mV/s (MSE: %.2e mV^2)', 0, mse_mpc_ideal(c)));
+    title(sprintf('MPC (MSE: %.2e mV^2)', 0, mse_mpc_perturb(c)));
     legend('Position', LegendPositionCE);
 
     sgtitle(sprintf('Model Predictive Control (interval: %d, horizon: %d)\nwith parameter deviations', shift, N_mpc));
 
-    save_figure(fig,figpath,"MPC_ParameterDisturb"+int2str(shift)+"_"+int2str(N_mpc));
+    save_figure(fig,figpath,sprintf("3_Perturb_MPC_%d_%d", shift, N_mpc));
 end
 
 
+%% 3.*) Summary plot: Model parameter deviations
+fig = figure();
+fig.Position(4) = 2*fig.Position(4); % resize width
+
+% Plot the normalized parameters
+subplot(4,1,1);
+plot(time, (param_sim./param)');
+ylim([0 2]);
+xlabel('t [s]');
+legend('\omega/\omega_0','a/a_0','k_1/k_{1,0}', 'Position',LegendPositionNE4);
+title('Model parameter deviations');
+
+% Multiple shooting
+subplot(4,1,2);
+hold on
+plot_trajectory(time, ref, X_ms_perturb, U_ms_perturb);
+title(sprintf('Direct multiple shooting (MSE: %.2e mV^2)', mse_ms_perturb));
+legend('Position', LegendPositionCE4);
+
+%MPC
+for c=1:n_config
+    % Get MPC configuration
+    shift = shift_values(c); % MPC interval
+    N_mpc = N_mpc_values(c); % MPC horizon
+
+    % Plot the normalized parameters
+    subplot(4,1,2+c);
+    hold on
+    plot_trajectory(time, ref, X_mpc_perturb{c}, U_mpc_perturb{c});
+    title(sprintf('MPC (interval: %d, horizon: %d, MSE: %.2e mV^2)', shift, N_mpc, mse_mpc_perturb(c)));
+end
+
+save_figure(fig,figpath,"3_Perturb_Summary");
+
+
 %% 4) Control cost factor (MPC)
-T = 2;          % s
+T = 1;          % s
 N = T*fs;       % steps
 time = ts*(0:N);
 
@@ -283,13 +394,13 @@ for c=1:n_config
     end
 end
 
-% Plot the results
+%% Plot the results
 fig = figure();
 subplot(2,1,1);
 loglog(alpha_values,mce)
 xlabel('Control cost factor /alpha');
 ylabel('Mean control energy [a.u.^2]');
-legend(arrayfun(@(c) {sprintf("interval: %d, horizon: %d", shift_values(c), N_mpc_values(c))}, 1:n_config));
+legend(arrayfun(@(c) {sprintf("interval: %d, horizon: %d", shift_values(c), N_mpc_values(c))}, 1:n_config), 'Position',LegendPositionNE);
 
 subplot(2,1,2);
 loglog(alpha_values,mse)
@@ -299,7 +410,7 @@ title(sprintf('\\sigma: %g mV/s', sigma));
 
 sgtitle('Control cost balance factor');
 
-save_figure(fig,figpath,"OptimizeK"+int2str(shift)+"_"+int2str(N_mpc));
+save_figure(fig,figpath,"4_ControlCost");
 
 
 %% Plot functions
@@ -362,7 +473,7 @@ function plot_phase_trajectory(X1, X2, p, tau, ode)
     end
     quiver(xx,yy,10*u,10*v,'LineWidth',0.8,'MaxHeadSize', 0.4)
     axis(0.12*[-1 1 -1 1]);
-    
+
     xlabel('x_1 [mV]');
     ylabel('x_2 [mV]');
     title('State space')
