@@ -1,4 +1,4 @@
-% Plots control energy - MSE
+% Run and plot direct multiple shooting and MPC simulations
 
 clear variables
 close all
@@ -217,8 +217,13 @@ N = T*fs;       % steps
 time = ts*(0:N);
 
 % Control cost values to evaluate
-alpha_values = logspace(-4,2,12);
+alpha_values = logspace(-3,3,13);
 n_alpha = length(alpha_values);
+
+% MPC parameters to evaluate (different configurations)
+shift_values = [ 1,  1,  5,  5, 10, 10]; % timesteps (MPC interval)
+N_mpc_values = [20, 10, 20, 10, 20, 10]; % timesteps (MPC horizon)
+n_config = length(shift_values);
 
 % Run simulation for each MPC configuration
 mse = zeros(n_alpha,n_config); % mean squared error to reference
@@ -248,8 +253,7 @@ subplot(2,1,1);
 loglog(alpha_values,mce)
 xlabel('Control cost factor /alpha');
 ylabel('Mean control energy [a.u.^2]');
-title("Shift = " + int2str(shift) +", Horizon = "+int2str(N_mpc));
-legend(arrayfun(@(shift) {"Shift: " + num2str(shift)}, shift_values));
+legend(arrayfun(@(c) {sprintf("interval: %d, horizon: %d", shift_values(c), N_mpc_values(c))}, 1:n_config));
 
 subplot(2,1,2);
 loglog(alpha_values,mse)
