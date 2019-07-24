@@ -21,10 +21,10 @@ figpath = "Figures/";
 % Simulation
 fs = 160;       % Hz (sampling frequency)
 ts = 1/fs;      % s (time step)
-x0 = [.5; 0];   % mV (initial conditions)
+x0 = [0; 0.1];  % mV (initial conditions)
 
 % Model parameters (nominal values)
-param = [2*pi*6; .01; -1e2; 0]; % [w; a; k1; k2]
+param = [2*pi*6; .01; 1e2; 0];  % [w; a; k1; k2]
 tau = 0.1;                      % s (stiffness constant)
 sigma = 10;                     % mV/s (for state noise simulations)
 
@@ -44,6 +44,7 @@ N_mpc_values = [20, 20];    % timesteps (MPC horizon)
 % Declare model variables
 x1 = SX.sym('x1');
 x2 = SX.sym('x2');
+u  = SX.sym('u');
 w  = SX.sym('w');
 a  = SX.sym('a');
 k1 = SX.sym('k1');
@@ -51,16 +52,19 @@ k2 = SX.sym('k2');
 
 x = [x1; x2];
 p = [w; a; k1; k2];
-u = SX.sym('u');
 
 % Model equations
-xdot = ode(x,u,[tau,w,a,k1,k2]);
-t = SX.sym('t');
+ode = @(x1,x2,u,w,a,k1,k2,tau) [ ...
+    -x2.*w + x1.*(a - x1.^2 - x1.^2)./tau + k1.*u; ...
+     x1.*w + x2.*(a - x1.^2 - x2.^2)./tau + k2.*u ];
+
+xdot = ode(x1,x2,u,w,a,k1,k2,tau);
 
 
 %% Optimal control problem
 % Objective
-ref = @(t) a_ref*cos(2*pi*f_ref*t); % reference (defined as a function)
+t = SX.sym('t');
+ref = @(t) a_ref*sin(2*pi*f_ref*t); % reference (defined as a function)
 L = (ref(t)-x1)^2 + alpha*u^2;      % objective function
 
 % Formulate discrete time dynamics for state and objective functions using
@@ -91,7 +95,7 @@ save_figure(fig,figpath,'Plant');
 
 % Plot phase plane trajectory
 fig = figure();
-plot_phase_trajectory(X1, X2, param, tau, @ode);
+plot_phase_trajectory(X1, X2, param, tau, ode);
 title('Model dynamics');
 save_figure(fig,figpath,'PlantPhase');
 
@@ -309,6 +313,7 @@ function plot_trajectory(time, ref, X, U)
     ylim([-1.5 1.5]);
 end
 
+
 function plot_X_trajectory(time, X, param)
     % Plot only state variables and limit cycle
     hold on;
@@ -322,18 +327,18 @@ function plot_X_trajectory(time, X, param)
     ylim([-0.11 0.11]);
 end
 
-function plot_phase_trajectory(X1, X2, param, tau, ode)
-    hold on;
 
+function plot_phase_trajectory(X1, X2, p, tau, ode)
     %plot first line
+    hold on;
     plot(X1(1,:), X1(2,:),'c-','HandleVisibility','off');
     plot(X1(1,1),X1(2,1),'r*')
     plot(X1(1,end),X1(2,end),'bo')
 
     %plot limit cycle
     th = 0:pi/50:2*pi;
-    xunit = sqrt(param(2)) * cos(th);
-    yunit = sqrt(param(2)) * sin(th);
+    xunit = sqrt(p(2)) * cos(th);
+    yunit = sqrt(p(2)) * sin(th);
     plot(xunit, yunit, 'k--');
 
     %plot second line
@@ -346,7 +351,7 @@ function plot_phase_trajectory(X1, X2, param, tau, ode)
     u=zeros(size(xx));
     for ii=1:size(xx,1)
         for jj=1:size(xx,2)
-            out = ode([xx(ii,jj),yy(ii,jj)],0,[tau,param]);
+            out = ode(xx(ii,jj),yy(ii,jj),0,p(1),p(2),p(3),p(4),tau);
             u(ii,jj)=out(1);
             v(ii,jj)=out(2);
         end
@@ -359,6 +364,7 @@ function plot_phase_trajectory(X1, X2, param, tau, ode)
     title('State space')
     legend('Start Point', 'End Point', 'Limit cycle')
 end
+
 
 function save_figure(fig, figpath, name)
     % Save figure as .eps
