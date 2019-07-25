@@ -15,8 +15,10 @@ set(0,'defaultFigurePosition',[10 10 800 600]); % figure size
 set(0,'defaultLegendLocation','none');      % manual legend position
 LegendPositionNE  = [0.78 0.82 0.14 0.15];  % upper  right
 LegendPositionCE  = [0.78 0.34 0.14 0.15];  % center right
-LegendPositionNC2 = [0.42 0.86 0.06 0.11];  % upper  center (1x2 plots)
-LegendPositionNE2 = [0.86 0.86 0.06 0.11];  % upper  right  (1x2 plots)
+% LegendPositionNC2 = [0.42 0.86 0.06 0.11];  % upper  center (1x2 plots)
+% LegendPositionNE2 = [0.86 0.86 0.06 0.11];  % upper  right  (1x2 plots)
+LegendPositionNC2 = [0.73 0.87 0.23 0.11];  % upper  center (1x2 plots)
+LegendPositionNE2 = [0.73 0.40 0.23 0.11];  % upper  right  (1x2 plots)
 LegendPositionNE3 = [0.90 0.84 0.06 0.11];  % upper  right  (1x3 plots)
 LegendPositionNE4 = [0.84 0.84 0.08 0.06];  % upper  right  (4x1 plots)
 LegendPositionCE4 = [0.84 0.64 0.08 0.06];  % center right  (4x1 plots)
@@ -95,16 +97,16 @@ end
 
 % Plot trajectories in single figure
 fig = figure();
-fig.Position(3) = 2*fig.Position(3); % resize width
+fig.Position(3) = .5*fig.Position(3); % resize width
 
 % Plot time trajectory
-subplot(1,2,1);
+subplot(2,1,1);
 plot_X_trajectory(time, X1, param);
 legend('Position',LegendPositionNC2);
 title('Time trajectory');
 
 % Plot phase plane trajectory
-subplot(1,2,2);
+subplot(2,1,2);
 plot_phase_trajectory(X1, X2, param, tau, ode);
 legend('Position',LegendPositionNE2);
 title('Phase trajectory');
@@ -398,17 +400,16 @@ end
 fig = figure();
 subplot(2,1,1);
 loglog(alpha_values,mce)
-xlabel('Control cost factor /alpha');
+xlabel('Control cost factor \alpha');
 ylabel('Mean control energy [a.u.^2]');
 legend(arrayfun(@(c) {sprintf("interval: %d, horizon: %d", shift_values(c), N_mpc_values(c))}, 1:n_config), 'Position',LegendPositionNE);
 
 subplot(2,1,2);
 loglog(alpha_values,mse)
-xlabel('Control cost factor /alpha');
+xlabel('Control cost factor \alpha');
 ylabel('MSE [mV^2]');
-title(sprintf('\\sigma: %g mV/s', sigma));
 
-sgtitle('Control cost balance factor');
+sgtitle(sprintf('Control cost balance factor\n(\\sigma = %g mV/s)', sigma));
 
 save_figure(fig,figpath,"4_ControlCost");
 
