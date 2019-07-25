@@ -5,7 +5,7 @@ We implement a model predictive control (MPC) approach using direct multiple sho
 ## Requirements
 
 * [MATLAB](https://www.mathworks.com/products/matlab.html) (tested in R2018b)
-* [CasADi](https://www.mathworks.com/products/matlab.html)
+* [CasADi](https://web.casadi.org/)
 
 ## Description
 
