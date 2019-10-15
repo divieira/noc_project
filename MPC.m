@@ -1,5 +1,5 @@
-function [X, U] = MPC(F, x0, param, sigma, N, N_mpc, shift, ts, varargin)
-% [X, U] = MPC(F, x0, param, sigma, N, N_mpc, shift, ts, [param_sim])
+function [X, U, timings] = MPC(F, x0, param, sigma, N, N_mpc, shift, ts, param_sim, nlpsol_opts)
+% [X, U, timings] = MPC(F, x0, param, sigma, N, N_mpc, shift, ts, [param_sim], [nlpsol_opts])
 % Run a model predictive control simulation.
 % Inputs:
 %   F       integrator function receiving (x0,p,u,t) as parameters
@@ -11,21 +11,30 @@ function [X, U] = MPC(F, x0, param, sigma, N, N_mpc, shift, ts, varargin)
 %   shift   evaluation interval
 %   ts      timestep size
 %   [param_sim] separate time-varying parameters for simulation (optional)
+%   [nlpsol_opts] options struct for nlpsol functions (optional)
 % Returns:
 %   X       DxN array with simulated state trajectory
 %   U       1xN array with applied control trajectory
+%   timings (N/shift)x1 array of elapsed time in each MPC evaluation
 %
 % See: CasADi example direct_multiple_shooting.m
 
 import casadi.*
 
-% Optional argument
-% If not provided, use the parameters used by the controller in simulation
-narginchk(8,9);
-if nargin < 9
+% Optional arguments
+if ~exist('param_sim','var') || isempty(param_sim)
+    % If not provided, use the parameters used by the controller in simulation
     param_sim = repmat(param,1,N);
-else
-    param_sim = varargin{1};
+end
+
+if ~exist('nlpsol_opts','var')
+    % Default parameters for CASADI nlpsol
+    nlpsol_opts = struct;
+    %options.ipopt.max_iter = 6;            %Set maximum iterations - normally 4 iterations are enough
+    nlpsol_opts.ipopt.print_level=0;        %No printing of evaluations
+    nlpsol_opts.print_time= 0;              %No printing of time
+    %nlpsol_opts.ipopt.linear_solver='ma27'; %Requires HLS library
+    %nlpsol_opts.jit=true;                   %Enable JIT compilation
 end
 
 
@@ -64,17 +73,18 @@ ubg = zeros(nx*N_mpc,1);
 
 % Create an NLP solver (with time index ik as parameter)
 prob = struct('f', J, 'x', vertcat(w{:}) , 'g', vertcat(g{:}),'p',t0);
-options = struct;
-%options.ipopt.max_iter = 6;     %Set maximum iterations - normally 4 iterations are enough
-options.ipopt.print_level=0;     %No printing of evaluations
-options.print_time= 0;           %No printing of time
-solver = nlpsol('solver', 'ipopt', prob, options);
+solver = nlpsol('solver', 'ipopt', prob, nlpsol_opts);
 
 %% Run MPC Simulation
 X = x0;
 U = [];
 w_opt=zeros(nx+N_mpc*3,1);
-for i = 0:shift:N-1
+N_cycles = floor(N/shift);
+timings = zeros(N_cycles,1);
+for i = 1:N_cycles
+    % Set starting time for 'toc'
+    tic;
+
     % Extend values for warm starting
     w_opt(end+1:end+shift*(nx+nu)) = repmat(w_opt(end-(nx+nu)+1:end),shift,1);
 
@@ -92,15 +102,19 @@ for i = 0:shift:N-1
     end
 
     % Solve the NLP
-    sol = solver('x0',w0, 'lbx',lbw, 'ubx',ubw, 'lbg',lbg, 'ubg',ubg,'p',i*ts);
+    t0 = (i-1)*shift*ts;
+    sol = solver('x0',w0, 'lbx',lbw, 'ubx',ubw, 'lbg',lbg, 'ubg',ubg,'p',t0);
     w_opt = full(sol.x);
     u_opt = w_opt(nx+1:nx+1:end);
 
     % Apply control steps to plant
     for k=0:shift-1
         U = [U, u_opt(k+1)];
-        Fk = F('x0',X(:,end), 'p',param_sim(:,1+i+k), 'u',U(end), 't',ts*(i+k));
+        Fk = F('x0',X(:,end), 'p',param_sim(:,1+i+k), 'u',U(end), 't',t0+ts*k);
         X = [X, full(Fk.xf)+normrnd(0,ts*sigma,[2,1])];
     end
+
+    % Save timing for current iteration
+    timings(i) = toc;
 end
 end

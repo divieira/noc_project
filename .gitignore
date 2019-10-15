@@ -30,4 +30,8 @@ octave-workspace
 # macOS
 .DS_Store
 
+# Exported figures
 *.eps
+
+# JIT compilation artifact
+jit_tmp.c
