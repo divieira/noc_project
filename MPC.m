@@ -46,14 +46,14 @@ J = 0;
 g = {};
 
 % "Lift" initial conditions
-Xk = MX.sym('Xk', nx);
+Xk = SX.sym('Xk', nx);
 w = {Xk};
 
 % Add shootings for each timestemp in the horizon
-t0 = MX.sym('t0', 1);
+t0 = SX.sym('t0', 1);
 for k=0:N_mpc-1
     % New NLP variable for the control
-    Uk = MX.sym(['U_' num2str(k)]);
+    Uk = SX.sym(['U_' num2str(k)]);
     w = {w{:}, Uk};
 
     % Integrate till the end of the interval
@@ -62,7 +62,7 @@ for k=0:N_mpc-1
     J = J+Fk.qf;
 
     % New NLP variable for state at end of interval
-    Xk = MX.sym(['X_' num2str(k+1)], nx);
+    Xk = SX.sym(['X_' num2str(k+1)], nx);
     w = [w, {Xk}];
 
     % Add equality constraint
