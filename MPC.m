@@ -12,7 +12,7 @@ function [X, U, timings] = MPC(F, x0, param, sigma, N, N_mpc, shift, ts, param_s
 %   ts      timestep size
 %   [param_sim]     separate time-varying parameters for simulation (optional)
 %   [nlpsol_opts]   options struct for nlpsol functions (optional)
-%   [warm_start]    warm start mode (0 [default]: none, 1: repeat, 2: shift)
+%   [warm_start]    warm start mode (0 [default]: none, ±1: repeat, ±2: shift, negative: w0 only)
 % Returns:
 %   X       DxN array with simulated state trajectory
 %   U       1xN array with applied control trajectory
@@ -43,7 +43,7 @@ if ~exist('warm_start','var')
     warm_start = 0;
 end
 
-if (warm_start &&                                           ...
+if (warm_start > 0 &&                                           ...
     (~isfield(nlpsol_opts, 'ipopt') ||                      ...
      ~isfield(nlpsol_opts.ipopt, 'warm_start_init_point')))
     % Set warm start option if applicable (but do not override if supplied)
@@ -100,7 +100,7 @@ for i = 1:N_cycles
     % Set starting time for 'toc'
     tic;
 
-    % Initial guess for x0 (and lambda multipliers if warm starting)
+    % Initial guess for w0 (and lambda multipliers if warm starting)
     switch warm_start
         case 0  % none
             % Only set x0 in initial guess
@@ -112,12 +112,18 @@ for i = 1:N_cycles
             lam_w0  = lam_w_opt;
             lam_g0  = lam_g_opt;
             lam_args = { 'lam_x0',lam_w0, 'lam_g0',lam_g0 };
+        case -1 % repeat w0 only
+            w0      = w_opt;
+            lam_args = {};
         case 2  % shift
             % Shift optimal values from previous evaluation (clamping last)
             w0      = [    w_opt(shift*(nx+nu)+1:end); repmat(    w_opt(end-(nx+nu)+1:end),shift,1)];
             lam_w0  = [lam_w_opt(shift*(nx+nu)+1:end); repmat(lam_w_opt(end-(nx+nu)+1:end),shift,1)];
             lam_g0  = [lam_g_opt(shift*(nx   )+1:end); repmat(lam_g_opt(end-(nx   )+1:end),shift,1)];
             lam_args = { 'lam_x0',lam_w0, 'lam_g0',lam_g0 };
+        case -2 % shift w0 only
+            w0      = [    w_opt(shift*(nx+nu)+1:end); repmat(    w_opt(end-(nx+nu)+1:end),shift,1)];
+            lam_args = {};
     end
 
     % Variable constraints
