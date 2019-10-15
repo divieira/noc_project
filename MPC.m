@@ -1,5 +1,5 @@
-function [X, U, timings] = MPC(F, x0, param, sigma, N, N_mpc, shift, ts, param_sim, nlpsol_opts)
-% [X, U, timings] = MPC(F, x0, param, sigma, N, N_mpc, shift, ts, [param_sim], [nlpsol_opts])
+function [X, U, timings] = MPC(F, x0, param, sigma, N, N_mpc, shift, ts, param_sim, nlpsol_opts, warm_start)
+% [X, U, timings] = MPC(F, x0, param, sigma, N, N_mpc, shift, ts, [param_sim], [nlpsol_opts], [warm_start])
 % Run a model predictive control simulation.
 % Inputs:
 %   F       integrator function receiving (x0,p,u,t) as parameters
@@ -10,8 +10,9 @@ function [X, U, timings] = MPC(F, x0, param, sigma, N, N_mpc, shift, ts, param_s
 %   N_mpc   optimization horizon
 %   shift   evaluation interval
 %   ts      timestep size
-%   [param_sim] separate time-varying parameters for simulation (optional)
-%   [nlpsol_opts] options struct for nlpsol functions (optional)
+%   [param_sim]     separate time-varying parameters for simulation (optional)
+%   [nlpsol_opts]   options struct for nlpsol functions (optional)
+%   [warm_start]    warm start mode (0 [default]: none, 1: repeat, 2: shift)
 % Returns:
 %   X       DxN array with simulated state trajectory
 %   U       1xN array with applied control trajectory
@@ -37,6 +38,17 @@ if ~exist('nlpsol_opts','var')
     %nlpsol_opts.jit=true;                   %Enable JIT compilation
 end
 
+if ~exist('warm_start','var')
+    % Default: no warm starting
+    warm_start = 0;
+end
+
+if (warm_start &&                                           ...
+    (~isfield(nlpsol_opts, 'ipopt') ||                      ...
+     ~isfield(nlpsol_opts.ipopt, 'warm_start_init_point')))
+    % Set warm start option if applicable (but do not override if supplied)
+    nlpsol_opts.ipopt.warm_start_init_point = 'yes';
+end
 
 %% Formulate NLP once
 % Start with an empty NLP
@@ -78,7 +90,9 @@ solver = nlpsol('solver', 'ipopt', prob, nlpsol_opts);
 %% Run MPC Simulation
 X = [x0 zeros(nx,N)];
 U = zeros(nu,N);
-w_opt=zeros(nx+N_mpc*3,1);
+w_opt     = zeros(nx+N_mpc*(nx+nu),1);
+lam_w_opt = zeros(nx+N_mpc*(nx+nu),1);
+lam_g_opt = zeros(nx*N_mpc,1);
 N_cycles = floor(N/shift);
 timings = zeros(N_cycles,1);
 p = 1;
@@ -86,20 +100,36 @@ for i = 1:N_cycles
     % Set starting time for 'toc'
     tic;
 
-    % Extend values for warm starting
-    w_opt(end+1:end+shift*(nx+nu)) = repmat(w_opt(end-(nx+nu)+1:end),shift,1);
-
-    % Initial guess (warm start by shifting previous solution)
-    w0  = [X(:,p); w_opt(nx+shift*(nx+nu)+1:end)];
+    % Initial guess for x0 (and lambda multipliers if warm starting)
+    switch warm_start
+        case 0  % none
+            % Only set x0 in initial guess
+            w0      = [X(:,p);    zeros(N_mpc*(nx+nu),1)];
+            lam_args = {};
+        case 1  % repeat
+            % Use optimal values from previous evaluation
+            w0      = w_opt;
+            lam_w0  = lam_w_opt;
+            lam_g0  = lam_g_opt;
+            lam_args = { 'lam_x0',lam_w0, 'lam_g0',lam_g0 };
+        case 2  % shift
+            % Shift optimal values from previous evaluation (clamping last)
+            w0      = [    w_opt(shift*(nx+nu)+1:end); repmat(    w_opt(end-(nx+nu)+1:end),shift,1)];
+            lam_w0  = [lam_w_opt(shift*(nx+nu)+1:end); repmat(lam_w_opt(end-(nx+nu)+1:end),shift,1)];
+            lam_g0  = [lam_g_opt(shift*(nx   )+1:end); repmat(lam_g_opt(end-(nx   )+1:end),shift,1)];
+            lam_args = { 'lam_x0',lam_w0, 'lam_g0',lam_g0 };
+    end
 
     % Variable constraints
-    lbw = [X(:,p); repmat([0; -inf(nx,1)], N_mpc,1)];
-    ubw = [X(:,p); repmat([1;  inf(nx,1)], N_mpc,1)];
+    lbw = [X(:,p); repmat([zeros(nu,1); -inf(nx,1)], N_mpc,1)];
+    ubw = [X(:,p); repmat([ ones(nu,1);  inf(nx,1)], N_mpc,1)];
 
     % Solve the NLP
     t0 = (i-1)*shift*ts;
-    sol = solver('x0',w0, 'lbx',lbw, 'ubx',ubw, 'lbg',lbg, 'ubg',ubg,'p',t0);
+    sol = solver('x0',w0, lam_args{:}, 'lbx',lbw, 'ubx',ubw, 'lbg',lbg, 'ubg',ubg, 'p',t0);
     w_opt = full(sol.x);
+    lam_w_opt = full(sol.lam_x);
+    lam_g_opt = full(sol.lam_g);
     u_opt = w_opt(nx+1:nx+1:end);
 
     % Apply control steps to plant

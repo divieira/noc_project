@@ -24,6 +24,7 @@ alpha = .01;    % control cost factor
 % MPC parameters
 shift = 5;  % timesteps (MPC interval)
 N_mpc = 20; % timesteps (MPC horizon)
+warm_start = 0;	% (0 [default]: none, 1: repeat, 2: shift)
 
 % Simulation parameters
 T = 1;      % s (simulation period)
@@ -72,7 +73,7 @@ F = rk4integrator(x, p, u, t, xdot, L, 1/fs);
 
 %% Run MPC
 rng default; % Fix RNG for reproducibility
-[X,U,timings] = MPC(F,x0,param,sigma,N,N_mpc,shift,ts,[],nlpsol_opts);
+[X,U,timings] = MPC(F,x0,param,sigma,N,N_mpc,shift,ts,[],nlpsol_opts,warm_start);
 fprintf('Simulation run time: %g s (%g ± %g ms per MPC evaluation)\n', ...
         sum(timings), 1e3*mean(timings), 1e3*std(timings));
 
