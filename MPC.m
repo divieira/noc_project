@@ -54,7 +54,7 @@ t0 = SX.sym('t0', 1);
 for k=0:N_mpc-1
     % New NLP variable for the control
     Uk = SX.sym(['U_' num2str(k)]);
-    w = {w{:}, Uk};
+    w = [w, {Uk}];
 
     % Integrate till the end of the interval
     Fk = F('x0',Xk, 'p',param, 'u',Uk, 't',t0+(ts*k));
@@ -76,11 +76,12 @@ prob = struct('f', J, 'x', vertcat(w{:}) , 'g', vertcat(g{:}),'p',t0);
 solver = nlpsol('solver', 'ipopt', prob, nlpsol_opts);
 
 %% Run MPC Simulation
-X = x0;
-U = [];
+X = [x0 zeros(nx,N)];
+U = zeros(nu,N);
 w_opt=zeros(nx+N_mpc*3,1);
 N_cycles = floor(N/shift);
 timings = zeros(N_cycles,1);
+p = 1;
 for i = 1:N_cycles
     % Set starting time for 'toc'
     tic;
@@ -89,17 +90,11 @@ for i = 1:N_cycles
     w_opt(end+1:end+shift*(nx+nu)) = repmat(w_opt(end-(nx+nu)+1:end),shift,1);
 
     % Initial guess (warm start by shifting previous solution)
-    w0  = [X(:,end); w_opt(nx+shift*(nx+nu)+1:end)];
+    w0  = [X(:,p); w_opt(nx+shift*(nx+nu)+1:end)];
 
     % Variable constraints
-    lbw = X(:,end);
-    ubw = X(:,end);
-    for k=0:N_mpc-1
-        lbw = [lbw; 0];
-        ubw = [ubw; 1];
-        lbw = [lbw; -inf(nx,1)];
-        ubw = [ubw;  inf(nx,1)];
-    end
+    lbw = [X(:,p); repmat([0; -inf(nx,1)], N_mpc,1)];
+    ubw = [X(:,p); repmat([1;  inf(nx,1)], N_mpc,1)];
 
     % Solve the NLP
     t0 = (i-1)*shift*ts;
@@ -109,9 +104,10 @@ for i = 1:N_cycles
 
     % Apply control steps to plant
     for k=0:shift-1
-        U = [U, u_opt(k+1)];
-        Fk = F('x0',X(:,end), 'p',param_sim(:,1+i+k), 'u',U(end), 't',t0+ts*k);
-        X = [X, full(Fk.xf)+normrnd(0,ts*sigma,[2,1])];
+        U(:,p) = u_opt(k+1);
+        Fk = F('x0',X(:,p), 'p',param_sim(:,1+i+k), 'u',U(:,p), 't',t0+ts*k);
+        p = p+1;
+        X(:,p) = full(Fk.xf)+normrnd(0,ts*sigma,[2,1]);
     end
 
     % Save timing for current iteration
