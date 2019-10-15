@@ -24,7 +24,7 @@ x0 = [0; 0.1];  % mV (initial conditions)
 
 % Model parameters (nominal values)
 param = [2*pi*6; .01; 1e2; 0];  % [w; a; k1; k2]
-tau = 0.1;                      % s (stiffness constant)
+tau = 10;                       % s (stiffness constant)
 sigma = 10;                     % mV/s (for state noise simulations)
 
 % Reference (for multiple shooting and MPC)
@@ -54,8 +54,8 @@ p = [w; a; k1; k2];
 
 % Model equations
 ode = @(x1,x2,u,w,a,k1,k2,tau) [ ...
-    -x2.*w + x1.*(a - x1.^2 - x1.^2)./tau + k1.*u; ...
-     x1.*w + x2.*(a - x1.^2 - x2.^2)./tau + k2.*u ];
+    -x2.*w + x1.*(1 - (x1.^2 + x1.^2)./a)./tau + k1.*u; ...
+     x1.*w + x2.*(1 - (x1.^2 + x2.^2)./a)./tau + k2.*u ];
 
 xdot = ode(x1,x2,u,w,a,k1,k2,tau);
 
